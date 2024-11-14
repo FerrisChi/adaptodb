@@ -1,0 +1,11 @@
+raftGroups:
+  - shardID: 1
+    members:
+      1: "localhost:63001"
+      2: "localhost:63002"
+      3: "localhost:63003"
+  - shardID: 2
+    members:
+      4: "localhost:64001"
+      5: "localhost:64002"
+      6: "localhost:64003"

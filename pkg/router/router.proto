@@ -1,0 +1,18 @@
+// router.proto
+
+syntax = "proto3";
+
+package router;
+option go_package = "adaptodb/pkg/router/proto";
+
+service ShardRouter {
+  rpc GetShard (GetShardRequest) returns (GetShardResponse) {};
+}
+
+message GetShardRequest {
+  string key = 1;
+}
+
+message GetShardResponse {
+  uint64 shard_id = 1;
+}
