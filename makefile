@@ -1,8 +1,8 @@
-GOCMD=go build -v
+GOCMD=go build
 PROTO_DIR=pkg/router
 GO_OUT_DIR=pkg/router/proto
 
-build:
+build: proto
 	$(GOCMD) -o adaptodb ./cmd/adaptodb
 
 proto:
