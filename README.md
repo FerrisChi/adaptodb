@@ -2,7 +2,8 @@
 An Adaptive shard-balancing key-value database
 
 ## Build
-`make build`
+1. Download go mods: `go mod tidy`
+2. Make the repo: `make build`
 
 ## Get the shard id of a key:
 ### http
