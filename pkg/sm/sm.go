@@ -6,7 +6,7 @@ import (
 	"errors"
 	"io"
 
-	"github.com/lni/dragonboat/v4/statemachine"
+	"github.com/lni/dragonboat/v3/statemachine"
 )
 
 type KVStore struct {
@@ -34,14 +34,14 @@ func (s *KVStore) Lookup(query interface{}) (interface{}, error) {
 }
 
 // Update applies a mutation to the state machine. This handles write requests.
-func (s *KVStore) Update(entry statemachine.Entry) (statemachine.Result, error) {
-	kv := bytes.SplitN(entry.Cmd, []byte("="), 2)
+func (s *KVStore) Update(data []byte) (statemachine.Result, error) {
+	kv := bytes.SplitN(data, []byte("="), 2)
 	if len(kv) != 2 {
 		return statemachine.Result{}, errors.New("invalid data format")
 	}
 	key, value := string(kv[0]), string(kv[1])
 	s.data[key] = value
-	return statemachine.Result{Value: uint64(len(entry.Cmd))}, nil
+	return statemachine.Result{Value: uint64(len(data))}, nil
 }
 
 // SaveSnapshot saves the current state for recovery in case of failure.

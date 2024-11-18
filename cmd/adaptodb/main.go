@@ -10,8 +10,8 @@ import (
 	"runtime"
 	"syscall"
 
-	"github.com/lni/dragonboat/v4"
-	dconfig "github.com/lni/dragonboat/v4/config"
+	"github.com/lni/dragonboat/v3"
+	dconfig "github.com/lni/dragonboat/v3/config"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
 	"gopkg.in/yaml.v3"
@@ -93,8 +93,8 @@ func main() {
 			}
 
 			rc := dconfig.Config{
-				ReplicaID:          nodeID,
-				ShardID:            group.ShardID,
+				NodeID:          nodeID,
+				ClusterID:            group.ShardID,
 				ElectionRTT:        10,
 				HeartbeatRTT:       2,
 				CheckQuorum:        true,
@@ -103,7 +103,7 @@ func main() {
 			}
 
 			// Start Raft node
-			if err := nh.StartReplica(group.Members, false, sm.NewKVStore, rc); err != nil {
+			if err := nh.StartCluster(group.Members, false, sm.NewKVStore, rc); err != nil {
 				log.Fatalf("failed to start node %d in cluster %d: %v", nodeID, group.ShardID, err)
 			}
 
@@ -115,7 +115,7 @@ func main() {
 
 	defer func() {
 		for _, nh := range nodeHostList {
-			nh.Close()
+			nh.Stop()
 		}
 	}()
 
