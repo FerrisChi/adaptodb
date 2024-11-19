@@ -2,6 +2,8 @@
 An Adaptive shard-balancing key-value database
 
 ## Build
+
+0. If you are migrating from dragonboat v4 to v3, please delete the `tmp/` data generated from previous runs first: `rm -r tmp/`
 1. Download go mods: `go mod tidy`
 2. Make the repo: `make build`
 
