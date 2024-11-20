@@ -21,9 +21,11 @@ import (
 	"adaptodb/pkg/controller"
 	"adaptodb/pkg/metadata"
 	"adaptodb/pkg/router"
+	"adaptodb/pkg/router/proto"
+	"adaptodb/pkg/schema"
 	"adaptodb/pkg/sm"
 
-	proto "adaptodb/pkg/router/proto"
+	protoController "adaptodb/pkg/controller/proto"
 )
 
 // raftGroups:
@@ -38,13 +40,6 @@ import (
 //       5: "localhost:64002"
 //       6: "localhost:64003"
 
-type Config struct {
-	RaftGroups []struct {
-		ShardID uint64            `yaml:"shardID"`
-		Members map[uint64]string `yaml:"members"`
-	} `yaml:"raftGroups"`
-}
-
 func main() {
 
 	logFile, err := os.OpenFile("adaptodb.log", os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0666)
@@ -54,7 +49,7 @@ func main() {
 	log.SetOutput(logFile)
 
 	// Load configuration
-	config := Config{}
+	config := schema.Config{}
 	data, err := os.ReadFile("config.yaml")
 	if err != nil {
 		log.Fatalf("failed to read configuration file: %v", err)
@@ -93,8 +88,8 @@ func main() {
 			}
 
 			rc := dconfig.Config{
-				NodeID:          nodeID,
-				ClusterID:            group.ShardID,
+				NodeID:             nodeID,
+				ClusterID:          group.ShardID,
 				ElectionRTT:        10,
 				HeartbeatRTT:       2,
 				CheckQuorum:        true,
@@ -120,18 +115,39 @@ func main() {
 	}()
 
 	// Initialize Metadata Manager
-	metadata, err := metadata.NewMetadata()
+	metadata, err := metadata.NewMetadata(&config)
 	if err != nil {
 		log.Fatalf("failed to initialize Metadata Manager: %v", err)
 	}
 
+	// Initialize Shard Controller and gRPC server
+	controller := controller.NewController(metadata)
+
+	controllerGrpcServer := grpc.NewServer()
+	protoController.RegisterControllerServer(controllerGrpcServer, controller)
+	reflection.Register(controllerGrpcServer)
+
+	controllerAddress := "localhost:8082"
+	lis, err := net.Listen("tcp", controllerAddress)
+	if err != nil {
+		log.Fatalf("failed to listen on port %s: %v", controllerAddress, err)
+	}
+	log.Println("gRPC server listening on", controllerAddress)
+
+	go func() {
+		if err := controllerGrpcServer.Serve(lis); err != nil {
+			log.Fatalf("failed to serve: %v", err)
+		}
+	}()
+
 	// Initialize Balance Watcher
-	balancer := balancer.NewBalancer(metadata)
+	analyzer := balancer.NewDefaultAnalyzer("default", metadata)
+	balancer, err := balancer.NewBalancer(controllerAddress, analyzer)
+	if err != nil {
+		log.Fatalf("failed to initialize Balance Watcher: %v", err)
+	}
 
-	// Initialize Shard Controller
-	controller := controller.NewController(balancer, metadata)
-
-	// Initialize Request Router
+	// Initialize Request Router and HTTP server
 	router := router.NewRouter(controller, metadata)
 
 	go func() {
@@ -143,25 +159,22 @@ func main() {
 	}()
 
 	// Initialize gRPC server
-	grpcServer := grpc.NewServer()
-	proto.RegisterShardRouterServer(grpcServer, router)
-	reflection.Register(grpcServer)
+	routerGrpcServer := grpc.NewServer()
+	proto.RegisterShardRouterServer(routerGrpcServer, router)
+	reflection.Register(routerGrpcServer)
 
-	const grpcAddress = "localhost:8081"
-	lis, err := net.Listen("tcp", grpcAddress)
+	routerGrpcAddress := "localhost:8081"
+	lis, err = net.Listen("tcp", routerGrpcAddress)
 	if err != nil {
-		log.Fatalf("failed to listen on port %s: %v", grpcAddress, err)
+		log.Fatalf("failed to listen on port %s: %v", routerGrpcAddress, err)
 	}
-	log.Println("gRPC server listening on", grpcAddress)
+	log.Println("gRPC server listening on", routerGrpcAddress)
 
 	go func() {
-		if err := grpcServer.Serve(lis); err != nil {
+		if err := routerGrpcServer.Serve(lis); err != nil {
 			log.Fatalf("failed to serve: %v", err)
 		}
 	}()
-
-	// Start Shard Controller
-	go controller.Start()
 
 	// Start Balance Watcher
 	go balancer.StartMonitoring()
@@ -180,7 +193,8 @@ func main() {
 	// Shutdown sequence
 	controller.Stop()
 	balancer.Stop()
-	grpcServer.GracefulStop()
+	controllerGrpcServer.GracefulStop()
+	routerGrpcServer.GracefulStop()
 
 	log.Println("AdaptoDB has shut down gracefully.")
 }
