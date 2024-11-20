@@ -20,9 +20,12 @@ An Adaptive shard-balancing key-value database
 > $ export PATH="$PATH:$(go env GOPATH)/bin"
 > ```
 
+3. Run the executable: `./adaptodb`
+
 ## Get the shard id of a key:
 ### http
 `curl "http://localhost:8080/?key=key123"`
 
 ### grpc
+Note: install grpcurl via `brew install grpcurl` if running for the first time
 `grpcurl -plaintext -d '{"key":"test-key"}' localhost:8081 router.ShardRouter/GetShard`

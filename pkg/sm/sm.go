@@ -10,7 +10,7 @@ import (
 )
 
 type KVStore struct {
-	data map[string]string // The key-value data store
+	data map[string]string `yaml:"data" json:"data"` // The key-value data store
 }
 
 // NewKVStore initializes and returns a new KVStore state machine instance.

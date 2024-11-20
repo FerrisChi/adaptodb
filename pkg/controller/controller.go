@@ -10,7 +10,7 @@ import (
 )
 
 type Controller struct {
-	metadata *metadata.Metadata
+	metadata *metadata.Metadata `yaml:"metadata" json:"metadata"`
 	pb.UnimplementedControllerServer
 	strategy string
 	operator *Operator

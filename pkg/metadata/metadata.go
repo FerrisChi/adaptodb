@@ -7,7 +7,7 @@ import (
 )
 
 type Metadata struct {
-	KeysToShardID map[string]uint64
+	KeysToShardID map[string]uint64 `yaml:"keys_to_shard_id" json:"keys_to_shard_id"`
 	shardMapping  []schema.ShardMetadata // A list of shard mappings
 	config        *schema.Config
 }
