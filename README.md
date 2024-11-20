@@ -27,4 +27,5 @@ An Adaptive shard-balancing key-value database
 `curl "http://localhost:8080/?key=key123"`
 
 ### grpc
+Note: install grpcurl via `brew install grpcurl` if running for the first time
 `grpcurl -plaintext -d '{"key":"test-key"}' localhost:8081 router.ShardRouter/GetShard`
