@@ -20,6 +20,8 @@ An Adaptive shard-balancing key-value database
 > $ export PATH="$PATH:$(go env GOPATH)/bin"
 > ```
 
+3. Run the executable: `./adaptodb`
+
 ## Get the shard id of a key:
 ### http
 `curl "http://localhost:8080/?key=key123"`
