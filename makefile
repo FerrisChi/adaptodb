@@ -1,20 +1,21 @@
 GOCMD=go build
-PROTO_DIR=pkg/router
-GO_OUT_DIR=pkg/router/proto
+PROTO_DIRS=pkg/router pkg/controller
 
 build: proto
 	$(GOCMD) -o adaptodb ./cmd/adaptodb
 
 proto:
 	@echo "Generating protobuf code..."
-	@mkdir -p $(GO_OUT_DIR)
-	@protoc --proto_path=$(PROTO_DIR) \
-		--go_out=$(GO_OUT_DIR) --go_opt=paths=source_relative \
-		--go-grpc_out=$(GO_OUT_DIR) --go-grpc_opt=paths=source_relative \
-		$(PROTO_DIR)/*.proto
+	@for dir in $(PROTO_DIRS); do \
+		mkdir -p $$dir/proto; \
+		protoc --proto_path=$$dir \
+			--go_out=$$dir/proto --go_opt=paths=source_relative \
+			--go-grpc_out=$$dir/proto --go-grpc_opt=paths=source_relative \
+			$$dir/*.proto; \
+	done
 
 clean:
 	rm -f adaptodb
-	rm -f $(GO_OUT_DIR)/*.pb.go
+	rm -f pkg/*/proto/*.pb.go
 
 .PHONY: build clean proto

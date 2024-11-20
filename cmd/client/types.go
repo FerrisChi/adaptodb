@@ -1,4 +1,4 @@
-package client
+package main
 
 // Operation types for database requests
 const (

@@ -9,6 +9,9 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 type Router struct {
@@ -30,9 +33,9 @@ func (r *Router) HandleRequest(w http.ResponseWriter, q *http.Request) {
 	key := q.URL.Query().Get("key")
 
 	// find the corresponding shard for the key
-	shardID, exists := r.metadata.GetShardID(key)
-	if !exists {
-		http.Error(w, fmt.Sprintf("Key %s not found", key), http.StatusNotFound)
+	shardID, error := r.metadata.GetShardForKey(key)
+	if error != nil {
+		http.Error(w, fmt.Sprintf("Key %s not assigned", key), http.StatusNotFound)
 		return
 	}
 	// return the shard id
@@ -45,14 +48,13 @@ func (r *Router) HandleRequest(w http.ResponseWriter, q *http.Request) {
 func (r *Router) GetShard(ctx context.Context, req *pb.GetShardRequest) (*pb.GetShardResponse, error) {
 	log.Printf("Received request from GRPC")
 	key := req.Key
-	log.Println("Key: ", key)
 
 	// find the corresponding shard for the key
-	// shardID, exists := r.metadata.GetShardID(key)
-	// if !exists {
-	// 	return nil, status.Errorf(codes.NotFound, "Key %s not found", key)
-	// }
-	// // return the shard id
-	// log.Printf("Key %s is in shard %d", key, shardID)
-	return &pb.GetShardResponse{ShardId: 1}, nil
+	shardID, error := r.metadata.GetShardForKey(key)
+	if error != nil {
+		return nil, status.Errorf(codes.NotFound, "Key %s not found", key)
+	}
+	// return the shard id
+	log.Printf("Key %s is in shard %d", key, shardID)
+	return &pb.GetShardResponse{ShardId: shardID}, nil
 }
