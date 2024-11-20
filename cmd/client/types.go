@@ -8,7 +8,7 @@ const (
 
 // RequestParams holds the parsed parameters from HTTP requests
 type RequestParams struct { // Uppercase for exported struct
-	Operation string
-	Key       string
-	Value     string
+	Operation string `yaml:"operation" json:"operation"`
+	Key       string `yaml:"key" json:"key"`
+	Value     string `yaml:"value" json:"value"`
 }

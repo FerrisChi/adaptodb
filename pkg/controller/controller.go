@@ -6,8 +6,8 @@ import (
 )
 
 type Controller struct {
-	balancer *balancer.Balancer
-	metadata *metadata.Metadata
+	balancer *balancer.Balancer `yaml:"balancer" json:"balancer"`
+	metadata *metadata.Metadata `yaml:"metadata" json:"metadata"`
 }
 
 func NewController(balancer *balancer.Balancer, metadata *metadata.Metadata) *Controller {

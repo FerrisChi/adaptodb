@@ -3,7 +3,7 @@ package balancer
 import metadata "adaptodb/pkg/metadata"
 
 type Balancer struct {
-	metadata *metadata.Metadata
+	metadata *metadata.Metadata `yaml:"metadata" json:"metadata"`
 }
 
 func NewBalancer(mm *metadata.Metadata) *Balancer {
