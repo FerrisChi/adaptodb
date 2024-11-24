@@ -10,8 +10,6 @@ import (
 	"runtime"
 	"syscall"
 
-	"github.com/lni/dragonboat/v3"
-	dconfig "github.com/lni/dragonboat/v3/config"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
 	"gopkg.in/yaml.v3"
@@ -20,25 +18,24 @@ import (
 	"adaptodb/pkg/balancer"
 	"adaptodb/pkg/controller"
 	"adaptodb/pkg/metadata"
+	pb "adaptodb/pkg/proto/proto"
 	"adaptodb/pkg/router"
-	"adaptodb/pkg/router/proto"
 	"adaptodb/pkg/schema"
-	"adaptodb/pkg/sm"
-
-	protoController "adaptodb/pkg/controller/proto"
 )
 
-// raftGroups:
-//   - shardID: 1
-//     members:
-//       1: "localhost:63001"
-//       2: "localhost:63002"
-//       3: "localhost:63003"
-//   - shardID: 2
-//     members:
-//       4: "localhost:64001"
-//       5: "localhost:64002"
-//       6: "localhost:64003"
+type SSHConfig struct {
+	Host    string // hostname:port or IP:port
+	User    string
+	KeyPath string // path to private key
+}
+type NodeSpec struct {
+	ID      uint64
+	Address string     // Raft address
+	SSH     *SSHConfig // nil for local nodes
+	GroupID uint64
+	DataDir string
+	WalDir  string
+}
 
 func main() {
 
@@ -68,63 +65,53 @@ func main() {
 		signal.Ignore(syscall.Signal(0xd))
 	}
 
-	nodeHostList := make([]*dragonboat.NodeHost, 0)
-	// Initialize each Raft group based on config
-	for _, group := range config.RaftGroups {
-		// Start each node in the group
-		for nodeID, address := range group.Members {
-			log.Printf("Starting Raft node %d with address %s in group %d", nodeID, address, group.ShardID)
-
-			nhc := dconfig.NodeHostConfig{
-				NodeHostDir:    fmt.Sprintf("tmp/data/node%d", nodeID),
-				WALDir:         fmt.Sprintf("tmp/wal/node%d", nodeID),
-				RTTMillisecond: 200,
-				RaftAddress:    address,
-			}
-
-			nh, err := dragonboat.NewNodeHost(nhc)
-			if err != nil {
-				log.Fatalf("failed to create NodeHost: %v", err)
-			}
-
-			rc := dconfig.Config{
-				NodeID:             nodeID,
-				ClusterID:          group.ShardID,
-				ElectionRTT:        10,
-				HeartbeatRTT:       2,
-				CheckQuorum:        true,
-				SnapshotEntries:    100,
-				CompactionOverhead: 10,
-			}
-
-			// Start Raft node
-			if err := nh.StartCluster(group.Members, false, sm.NewKVStore, rc); err != nil {
-				log.Fatalf("failed to start node %d in cluster %d: %v", nodeID, group.ShardID, err)
-			}
-
-			nodeHostList = append(nodeHostList, nh)
-			log.Printf("Started Raft node %d in group %d", nodeID, group.ShardID)
-		}
-		log.Printf("Started Raft group %d with Members: %v", group.ShardID, group.Members)
-	}
-
-	defer func() {
-		for _, nh := range nodeHostList {
-			nh.Stop()
-		}
-	}()
-
 	// Initialize Metadata Manager
 	metadata, err := metadata.NewMetadata(&config)
 	if err != nil {
 		log.Fatalf("failed to initialize Metadata Manager: %v", err)
 	}
 
+	// Initialize Dragonboat Nodes
+	launcher := NewLauncher()
+
+	for _, group := range config.RaftGroups {
+		groupMembers := make(map[uint64]string)
+		for nodeID, nodeInfo := range group.Members {
+			groupMembers[nodeID] = nodeInfo.Address
+		}
+		keyRanges := metadata.GetShardKeyRanges(group.ShardID)
+
+		for nodeID, nodeInfo := range group.Members {
+			var ssh *SSHConfig
+			if IsLocalAddress(nodeInfo.Address) {
+				ssh = nil
+			} else {
+				ssh = &SSHConfig{
+					Host:    nodeInfo.Address,
+					User:    nodeInfo.User,
+					KeyPath: nodeInfo.SSHKeyPath,
+				}
+			}
+			spec := NodeSpec{
+				ID:      nodeID,
+				Address: nodeInfo.Address,
+				SSH:     ssh,
+				GroupID: group.ShardID,
+				DataDir: fmt.Sprintf("tmp/data/node%d", nodeID),
+				WalDir:  fmt.Sprintf("tmp/wal/node%d", nodeID),
+			}
+
+			if err := launcher.Launch(spec, groupMembers, keyRanges); err != nil {
+				log.Fatalf("failed to launch node %d: %v", nodeID, err)
+			}
+		}
+	}
+
 	// Initialize Shard Controller and gRPC server
 	controller := controller.NewController(metadata)
 
 	controllerGrpcServer := grpc.NewServer()
-	protoController.RegisterControllerServer(controllerGrpcServer, controller)
+	pb.RegisterControllerServer(controllerGrpcServer, controller)
 	reflection.Register(controllerGrpcServer)
 
 	controllerAddress := "localhost:8082"
@@ -152,6 +139,7 @@ func main() {
 
 	go func() {
 		http.HandleFunc("/", router.HandleRequest)
+		http.HandleFunc("/config", router.HandleConfigRequest)
 		log.Printf("HTTP server listening on localhost:8080")
 		if err := http.ListenAndServe("localhost:8080", nil); err != nil {
 			log.Fatalf("failed to start HTTP server: %v", err)
@@ -160,7 +148,7 @@ func main() {
 
 	// Initialize gRPC server
 	routerGrpcServer := grpc.NewServer()
-	proto.RegisterShardRouterServer(routerGrpcServer, router)
+	pb.RegisterShardRouterServer(routerGrpcServer, router)
 	reflection.Register(routerGrpcServer)
 
 	routerGrpcAddress := "localhost:8081"
@@ -189,6 +177,14 @@ func main() {
 	// Wait for termination signal
 	<-sigChan
 	log.Println("Shutdown signal received. Shutting down AdaptoDB...")
+
+	// Close all processes and sessions
+	for _, process := range launcher.localProcesses {
+		process.Process.Signal(syscall.SIGTERM)
+	}
+	for _, session := range launcher.sshSessions {
+		session.Close()
+	}
 
 	// Shutdown sequence
 	controller.Stop()

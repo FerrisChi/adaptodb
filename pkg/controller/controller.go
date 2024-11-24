@@ -1,8 +1,8 @@
 package controller
 
 import (
-	pb "adaptodb/pkg/controller/proto"
 	"adaptodb/pkg/metadata"
+	pb "adaptodb/pkg/proto/proto"
 	"adaptodb/pkg/schema"
 	"context"
 	"fmt"

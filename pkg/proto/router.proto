@@ -1,0 +1,41 @@
+// router.proto
+
+syntax = "proto3";
+
+package proto;
+option go_package = "adaptodb/pkg/proto";
+
+import "controller.proto";
+
+service ShardRouter {
+  rpc GetShard (GetShardRequest) returns (GetShardResponse) {};
+  rpc GetConfig (GetConfigRequest) returns (GetConfigResponse) {};
+}
+
+message GetShardRequest {
+  string key = 1;
+}
+
+message GetShardResponse {
+  uint64 shard_id = 1;
+}
+
+message GetConfigRequest {}
+
+message KeyRangeList {
+  repeated KeyRange key_ranges = 1;
+}
+
+message Member {
+    uint64 id = 1;
+    string addr = 2;
+}
+
+message Members {
+    repeated Member members = 1;
+}
+
+message GetConfigResponse {
+  map<uint64, KeyRangeList> shard_map = 1;
+  map<uint64, Members> shard_addr_map = 2;
+}

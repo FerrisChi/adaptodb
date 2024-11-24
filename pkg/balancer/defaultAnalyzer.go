@@ -69,14 +69,13 @@ func (a *DefaultAnalyzer) createShardSchedules(imbalancedShards []uint64, loads 
 	for _, idx := range imbalancedShards {
 		// create a new key range based on the strategy
 		shardID := loads[idx].ShardID
-		orin_range, err := a.metadata.GetShardKeyRange(shardID)
-		if err != nil {
-			log.Printf("Failed to get key range for shard %d: %v", shardID, err)
+		orig_ranges := a.metadata.GetShardKeyRanges(shardID)
+		if orig_ranges == nil {
 			continue
 		}
 		newSchedules = append(newSchedules, schema.ShardMetadata{
 			ShardID:  shardID,
-			KeyRange: orin_range,
+			KeyRange: orig_ranges[0],
 		})
 	}
 	return newSchedules, nil

@@ -3,7 +3,7 @@ package router
 import (
 	"adaptodb/pkg/controller"
 	"adaptodb/pkg/metadata"
-	pb "adaptodb/pkg/router/proto"
+	pb "adaptodb/pkg/proto/proto"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -44,6 +44,20 @@ func (r *Router) HandleRequest(w http.ResponseWriter, q *http.Request) {
 	json.NewEncoder(w).Encode(map[string]uint64{"shard": shardID})
 }
 
+// http.HandleFunc("/config", router.HandleConfigRequest)
+func (r *Router) HandleConfigRequest(w http.ResponseWriter, q *http.Request) {
+	log.Printf("Received request from %s", q.RemoteAddr)
+	mapping, error := r.metadata.GetAllShardKeyRanges()
+	if error != nil {
+		http.Error(w, "Failed to get shard mapping", http.StatusInternalServerError)
+		return
+	}
+	// return the mapping: uint64 -> []schema.KeyRange
+	log.Printf("Returning shard mapping")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(mapping)
+}
+
 // gRPC handler
 func (r *Router) GetShard(ctx context.Context, req *pb.GetShardRequest) (*pb.GetShardResponse, error) {
 	log.Printf("Received request from GRPC")
@@ -57,4 +71,34 @@ func (r *Router) GetShard(ctx context.Context, req *pb.GetShardRequest) (*pb.Get
 	// return the shard id
 	log.Printf("Key %s is in shard %d", key, shardID)
 	return &pb.GetShardResponse{ShardId: shardID}, nil
+}
+
+func (r *Router) GetConfig(ctx context.Context, req *pb.GetConfigRequest) (*pb.GetConfigResponse, error) {
+	log.Printf("Received request from GRPC")
+	mapping, error := r.metadata.GetAllShardKeyRanges()
+	if error != nil {
+		return nil, status.Errorf(codes.Internal, "Failed to get shard mapping")
+	}
+	// convert the mapping to the proto format
+	log.Printf("Returning shard mapping")
+	result := make(map[uint64]*pb.KeyRangeList)
+	for k, v := range mapping {
+		ranges := make([]*pb.KeyRange, 0, len(v))
+		for _, kr := range v {
+			ranges = append(ranges, &pb.KeyRange{Start: kr.Start, End: kr.End})
+		}
+		result[k] = &pb.KeyRangeList{KeyRanges: ranges}
+	}
+
+	addrMap := make(map[uint64]*pb.Members)
+	for _, v := range r.metadata.GetAllShardMembers() {
+		shardId := v.ShardID
+		members := make([]*pb.Member, 0, len(v.Members))
+		for idx, nodeInfo := range v.Members {
+			members = append(members, &pb.Member{Id: idx, Addr: nodeInfo.Address})
+		}
+		addrMap[shardId] = &pb.Members{Members: members}
+	}
+
+	return &pb.GetConfigResponse{ShardMap: result, ShardAddrMap: addrMap}, nil
 }

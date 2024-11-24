@@ -1,4 +1,7 @@
-adaptodb
+/adaptodb
+/client
+/node
+
 pkg/router/proto/**
 
 *.pb.go

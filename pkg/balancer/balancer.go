@@ -1,7 +1,7 @@
 package balancer
 
 import (
-	pb "adaptodb/pkg/controller/proto"
+	pb "adaptodb/pkg/proto/proto"
 	"context"
 	"log"
 	"time"

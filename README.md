@@ -22,10 +22,44 @@ An Adaptive shard-balancing key-value database
 
 3. Run the executable: `./adaptodb`
 
-## Get the shard id of a key:
-### http
+## Ports
+* Controller
+  * grpc: 8082
+  * Handle new schedule advice from balancer.
+* Controller Router
+  * http: 8080
+  * gprc: 8081
+  * Handle metadata query.
+* Dragonboat node router
+  * grpc: 51000 + node id
+  * Handle read/write request from client and manipulate statemachine.
+* Dragonboat internal
+  * ip:port set in `config.yaml`
+  * Hanlde dragonboat internal communication.
+
+## API
+### Get the shard metadata:
+
+`grpcurl -plaintext -d '{}' localhost:8081 proto.ShardRouter/GetConfig`
+
+### Read/Write:
+
+1. Read: 
+`grpcurl -plaintext -d '{"clusterID": 1, "key": "hello"}' localhost:51001 proto.NodeRouter/Read`
+
+2. Write:
+
+**!!!!!!!!! key starts with [a-z] !!!!!!!!!**
+
+**!!!!!!!!! value only contains [a-zA-Z0-9] !!!!!!!!!**
+
+`grpcurl -plaintext -d '{"clusterID": 1, "key": "hello", "value": "hello-dragonboat"}' localhost:51001 proto.NodeRouter/Write`
+
+### Get the shard id for key (test only)
+
+#### http
 `curl "http://localhost:8080/?key=key123"`
 
-### grpc
+#### grpc
 Note: install grpcurl via `brew install grpcurl` if running for the first time
-`grpcurl -plaintext -d '{"key":"test-key"}' localhost:8081 router.ShardRouter/GetShard`
+`grpcurl -plaintext -d '{"key":"test-key"}' localhost:8081 proto.ShardRouter/GetShard`

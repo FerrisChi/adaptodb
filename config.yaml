@@ -1,11 +1,22 @@
 raftGroups:
   - shardID: 1
     members:
-      1: "localhost:63001"
-      2: "localhost:63002"
-      3: "localhost:63003"
+      1:
+        address: "localhost:63001"
+      2:
+        address: "localhost:63002"
+      3:
+        address: "127.0.0.1:63003"
   - shardID: 2
     members:
-      4: "localhost:64001"
-      5: "localhost:64002"
-      6: "localhost:64003"
+      4:
+        address: "localhost:64001"
+      5:
+        address: "localhost:64002"
+      6:
+        address: "localhost:64003"
+    # 7:
+    #   host: "remote-host"
+    #   user: "root"
+    #   password: "root"
+    #   sshKeyPath: "/root/.ssh/id_rsa"

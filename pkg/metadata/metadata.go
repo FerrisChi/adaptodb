@@ -7,7 +7,7 @@ import (
 )
 
 type Metadata struct {
-	KeysToShardID map[string]uint64 `yaml:"keys_to_shard_id" json:"keys_to_shard_id"`
+	KeysToShardID map[string]uint64      `yaml:"keys_to_shard_id" json:"keys_to_shard_id"`
 	shardMapping  []schema.ShardMetadata // A list of shard mappings
 	config        *schema.Config
 }
@@ -94,13 +94,14 @@ func (ms *Metadata) UpdateShardKeyRange(shardID uint64, keyRange schema.KeyRange
 	return nil
 }
 
-func (ms *Metadata) GetShardKeyRange(shardID uint64) (schema.KeyRange, error) {
+func (ms *Metadata) GetShardKeyRanges(shardID uint64) []schema.KeyRange {
+	keyRanges := make([]schema.KeyRange, 0)
 	for _, shard := range ms.shardMapping {
 		if shard.ShardID == shardID {
-			return shard.KeyRange, nil
+			keyRanges = append(keyRanges, shard.KeyRange)
 		}
 	}
-	return schema.KeyRange{}, fmt.Errorf("shard not found")
+	return keyRanges
 }
 
 // GetAllShardKeyRanges returns all key ranges for each shard
@@ -110,4 +111,8 @@ func (ms *Metadata) GetAllShardKeyRanges() (map[uint64][]schema.KeyRange, error)
 		ranges[shard.ShardID] = append(ranges[shard.ShardID], shard.KeyRange)
 	}
 	return ranges, nil
+}
+
+func (ms *Metadata) GetAllShardMembers() []schema.RaftGroup {
+	return ms.config.RaftGroups
 }

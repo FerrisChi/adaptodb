@@ -1,0 +1,31 @@
+// nodeRouter.proto
+
+syntax = "proto3";
+
+package proto;
+option go_package = "adaptodb/pkg/proto";
+
+service NodeRouter {
+  rpc Read (ReadRequest) returns (ReadResponse) {};
+  rpc Write (WriteRequest) returns (WriteResponse) {};
+}
+
+message ReadRequest {
+  uint64 clusterID = 1;
+  string key = 2;
+}
+
+message ReadResponse {
+  string value = 1;
+}
+
+message WriteRequest {
+  uint64 clusterID = 1;
+  string key = 2;
+  string value = 3;
+}
+
+message WriteResponse {
+  uint64 status = 1;
+  bytes data = 2;
+}

@@ -1,8 +1,8 @@
 // controller.proto
 syntax = "proto3";
 
-package controller;
-option go_package = "adaptodb/pkg/controller/proto";
+package proto;
+option go_package = "adaptodb/pkg/proto";
 
 // Reuse matching types from pkg/schema/types.go
 message KeyRange {
