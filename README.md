@@ -63,3 +63,39 @@ An Adaptive shard-balancing key-value database
 #### grpc
 Note: install grpcurl via `brew install grpcurl` if running for the first time
 `grpcurl -plaintext -d '{"key":"test-key"}' localhost:8081 proto.ShardRouter/GetShard`
+
+
+## Code
+```
+cmd/
+    adaptodb/ # Main entry point for the database server
+        launcher.go # Used by controller to lauch Dragonboat nodes in local/remote
+        main.gp # Start Central Controller (Main entrance)
+    node/ # Node server implementation
+        main.go # Start NodeHost in Dragonboat and manipulate local statemachine
+        router.go # router to handle read/write request from clients
+    client/ # Client CLI implementation
+        main.go # User Interface
+        types.go
+pkg/
+    balancer # Load balancing and shard distribution logic
+    controller # Central controller for managing nodes and shards
+        controller.go # Analyse advice from balancer and make decision
+        operator.go # process migrate
+    metadata # Metadata management for shards and nodes
+        metadata.go 
+    router # Handle metadata request 
+        router.go
+    schema - Data schema definitions
+        types.go
+    sm - State machine implementation using key-value store
+        sm.go
+    Protocol Buffers:
+        proto # Protocol buffer definitions for:
+            Controller service # For new schedule advice
+            Node router service # For read/write request
+            Shard metadata # For metadata query
+config.yaml
+makefile
+```
+
