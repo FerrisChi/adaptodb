@@ -112,7 +112,6 @@ func read(key string) (string, error) {
 	client := pb.NewNodeRouterClient(conn)
 	resp, err := client.Read(ctx, &pb.ReadRequest{ClusterID: shardId, Key: key})
 	if err != nil {
-		log.Printf("Failed to read key %s: %v", key, err)
 		return "", err
 	}
 
@@ -139,6 +138,45 @@ func write(key, value string) (uint64, error) {
 	return resp.GetStatus(), nil
 }
 
+func process(parts []string) error {
+	var op, key, value string
+	if len(parts) == 2 && parts[0] == "f" { // find the shard id for key
+		key = parts[1]
+		shardId := getShardForKey(key)
+		fmt.Printf("Key %s is in shard %d\n", key, shardId)
+	} else if parts[0] == "r" || parts[0] == "w" { // Expecting format "w key value"
+		op = parts[0]
+		key = parts[1]
+		if op == "w" {
+			if len(parts) != 3 {
+				return fmt.Errorf("FORMAT_ERROR")
+			}
+			value = parts[2]
+		}
+		// connect to a dragonboat node in the shard
+		if op == "r" {
+			if len(parts) != 2 {
+				return fmt.Errorf("FORMAT_ERROR")
+			}
+			value, err := read(key)
+			if err != nil {
+				return fmt.Errorf("READ_FAILED %v", err)
+			}
+			fmt.Println("Read result: ", value)
+		} else {
+			status, err := write(key, value)
+			if err != nil {
+				return fmt.Errorf("WRITE_FAILED %v", err)
+			} else {
+				fmt.Println("Write successful", status, "changed.")
+			}
+		}
+	} else {
+		return fmt.Errorf("FORMAT_ERROR")
+	}
+	return nil
+}
+
 func main() {
 	// get the shard mapping
 	shards = getShardMapping()
@@ -155,40 +193,15 @@ func main() {
 		input = strings.TrimSpace(input) // Trim newline and extra spaces
 		parts := strings.Fields(input)   // Split the input by whitespace
 
-		var op, key, value string
-
-		if len(parts) == 2 && parts[0] == "f" { // find the shard id for key
-			key = parts[1]
-			shardId := getShardForKey(key)
-			fmt.Printf("Key %s is in shard %d\n", key, shardId)
-		} else if parts[0] == "r" || parts[0] == "w" { // Expecting format "w key value"
-			op = parts[0]
-			key = parts[1]
-			if op == "w" {
-				if len(parts) != 3 {
-					fmt.Println("Invalid input format. Use 'r key' or 'w key value'.")
-					continue
-				}
-				value = parts[2]
-			}
-			// connect to a dragonboat node in the shard
-			if op == "r" {
-				value, err := read(key)
-				if err != nil {
-					fmt.Println("Read failed: ", err)
-				}
-				fmt.Println("Read result: ", value)
+		err = process(parts)
+		if err != nil {
+			if strings.HasPrefix(err.Error(), "FORMAT_ERROR") {
+				fmt.Println("Invalid command format. Please use 'r key' or 'w key value'")
+			} else if strings.HasPrefix(err.Error(), "READ_FAILED") {
+				fmt.Println("Failed to read key:", strings.Split(err.Error(), "READ_FAILED")[1])
 			} else {
-				status, err := write(key, value)
-				if err != nil {
-					fmt.Println("Write failed: ", err)
-				} else {
-					fmt.Println("Write successful", status, "changed.")
-				}
+				fmt.Println("Error:", err)
 			}
-
-		} else {
-			fmt.Println("Invalid input format. Use 'r key' or 'w key value'.")
 		}
 	}
 }

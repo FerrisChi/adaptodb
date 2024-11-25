@@ -37,7 +37,11 @@ An Adaptive shard-balancing key-value database
   * ip:port set in `config.yaml`
   * Hanlde dragonboat internal communication.
 
-## API
+## Access AdaptoDB
+### Use client
+`./client`
+
+### APIs
 ### Get the shard metadata:
 
 `grpcurl -plaintext -d '{}' localhost:8081 proto.ShardRouter/GetConfig`
