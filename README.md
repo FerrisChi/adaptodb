@@ -42,11 +42,11 @@ An Adaptive shard-balancing key-value database
 `./client`
 
 ### APIs
-### Get the shard metadata:
+#### Get the shard metadata:
 
 `grpcurl -plaintext -d '{}' localhost:8081 proto.ShardRouter/GetConfig`
 
-### Read/Write:
+#### Read/Write:
 
 1. Read: 
 `grpcurl -plaintext -d '{"clusterID": 1, "key": "hello"}' localhost:51001 proto.NodeRouter/Read`
@@ -59,13 +59,15 @@ An Adaptive shard-balancing key-value database
 
 `grpcurl -plaintext -d '{"clusterID": 1, "key": "hello", "value": "hello-dragonboat"}' localhost:51001 proto.NodeRouter/Write`
 
-### Get the shard id for key (test only)
+#### Get the shard id for key (test only)
 
-#### http
-`curl "http://localhost:8080/?key=key123"`
+1. http
 
-#### grpc
-Note: install grpcurl via `brew install grpcurl` if running for the first time
+   `curl "http://localhost:8080/?key=key123"`
+
+2. grpc
+   
+   Note: install grpcurl via `brew install grpcurl` if running for the first time
 `grpcurl -plaintext -d '{"key":"test-key"}' localhost:8081 proto.ShardRouter/GetShard`
 
 
