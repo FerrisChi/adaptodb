@@ -184,6 +184,7 @@ func main() {
 	reader := bufio.NewReader(os.Stdin) // Create a buffered reader
 	fmt.Print("Enter command (e.g., 'r key' or 'w key value'):\n")
 	for {
+		fmt.Print("> ")
 		input, err := reader.ReadString('\n') // Read the entire line
 		if err != nil {
 			fmt.Println("Error reading input. Please try again.")
