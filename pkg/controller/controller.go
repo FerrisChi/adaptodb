@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"sort"
 )
 
 type Controller struct {
@@ -35,16 +36,22 @@ func (sc *Controller) UpdateSchedule(ctx context.Context, req *pb.UpdateSchedule
 	// Extract shard load information from request
 	protoSchedule := req.GetSchedule()
 	if len(protoSchedule) > 0 {
-		schedule := make([]*schema.ShardMetadata, 0, len(protoSchedule))
+		schedules := make([]*schema.Schedule, 0, len(protoSchedule))
 		for _, shard := range protoSchedule {
-			schedule = append(schedule, &schema.ShardMetadata{
-				ShardID:  shard.ShardId,
-				KeyRange: schema.KeyRange{Start: shard.KeyRange.Start, End: shard.KeyRange.End},
-			})
+			schedule := &schema.Schedule{
+				ShardID: shard.GetShardId(),
+			}
+			for _, keyRange := range shard.GetKeyRanges() {
+				schedule.KeyRanges = append(schedule.KeyRanges, schema.KeyRange{
+					Start: keyRange.GetStart(),
+					End:   keyRange.GetEnd(),
+				})
+			}
+			schedules = append(schedules, schedule)
 		}
 
 		// Perform data migration asynchronously
-		go func(newSchedule []*schema.ShardMetadata) {
+		go func(newSchedule []*schema.Schedule) {
 			// Perform data migrations
 			err := sc.performDataMigration(newSchedule)
 			if err != nil {
@@ -52,7 +59,7 @@ func (sc *Controller) UpdateSchedule(ctx context.Context, req *pb.UpdateSchedule
 			} else {
 				log.Println("Data migration completed successfully")
 			}
-		}(schedule)
+		}(schedules)
 	}
 
 	return &pb.UpdateScheduleResponse{
@@ -63,7 +70,7 @@ func (sc *Controller) UpdateSchedule(ctx context.Context, req *pb.UpdateSchedule
 
 // MigrationTask represents data movement between two shards
 
-func (sc *Controller) performDataMigration(schedule []*schema.ShardMetadata) error {
+func (sc *Controller) performDataMigration(schedule []*schema.Schedule) error {
 	oldSchedule, err := sc.metadata.GetAllShardKeyRanges()
 	if err != nil {
 		return fmt.Errorf("failed to get old schedule: %v", err)
@@ -75,58 +82,101 @@ func (sc *Controller) performDataMigration(schedule []*schema.ShardMetadata) err
 	// Gather all migrations between shard pairs
 	for _, newShard := range schedule {
 		newShardID := newShard.ShardID
-		newRange := newShard.KeyRange
+		newRanges := newShard.KeyRanges
 
 		for oldShardID, oldRanges := range oldSchedule {
 			if oldShardID == newShardID {
 				continue // Skip if same shard
 			}
 
+			// Get shard info once per shard pair
+			shards := sc.metadata.GetShardBatch([]uint64{oldShardID, newShardID})
+			if len(shards) != 2 || shards[0].Members == nil || shards[1].Members == nil {
+				return fmt.Errorf("failed to get valid shard info for shards %d and %d", oldShardID, newShardID)
+			}
+
+			// Collect all intersecting ranges for this shard pair
+			var intersections []schema.KeyRange
 			for _, oldRange := range oldRanges {
-				if rangesOverlap(oldRange, newRange) {
-					intersection := calculateIntersection(oldRange, newRange)
+				for _, newRange := range newRanges {
+					if intersection, overlaps := getKeyRangeIntersection(oldRange, newRange); overlaps {
+						intersections = append(intersections, intersection)
+					}
+				}
+			}
 
-					// Create key for migration pair
-					key := fmt.Sprintf("%v->%v", oldShardID, newShardID)
-
-					// Add to existing migration task or create new one
-					if task, exists := migrations[key]; exists {
-						task.ranges = append(task.ranges, intersection)
-					} else {
-						migrations[key] = &MigrationTask{
-							sourceShardID: oldShardID,
-							targetShardID: newShardID,
-							ranges:        []schema.KeyRange{intersection},
-						}
+			// Create migration task only if there are intersections
+			if len(intersections) > 0 {
+				key := fmt.Sprintf("%d->%d", oldShardID, newShardID)
+				if _, exists := migrations[key]; !exists {
+					migrations[key] = &MigrationTask{
+						fromShardInfo: shards[0],
+						toShardInfo:   shards[1],
+						ranges:        intersections,
 					}
 				}
 			}
 		}
 	}
 
-	// Execute migrations
+	// Consolidate overlapping ranges for each migration
 	for _, task := range migrations {
-		log.Printf("Migrating data from shard %d to shard %d for ranges: %v",
-			task.sourceShardID, task.targetShardID, task.ranges)
-
-		err := sc.operator.migrate(task.sourceShardID, task.targetShardID, task.ranges)
-		if err != nil {
-			return fmt.Errorf("failed to migrate data from shard %d to shard %d: %v",
-				task.sourceShardID, task.targetShardID, err)
-		}
+		task.ranges = consolidateKeyRanges(task.ranges)
 	}
 
 	return nil
 }
 
-// rangesOverlap checks if two key ranges overlap
-func rangesOverlap(range1, range2 schema.KeyRange) bool {
-	return range1.Start < range2.End && range2.Start < range1.End
+// Helper function to calculate intersection of two key ranges
+func getKeyRangeIntersection(r1, r2 schema.KeyRange) (schema.KeyRange, bool) {
+	start := r1.Start
+	if r2.Start > start {
+		start = r2.Start
+	}
+
+	end := r1.End
+	if r2.End < end {
+		end = r2.End
+	}
+
+	// Check if there is a valid intersection
+	if start >= end {
+		return schema.KeyRange{}, false
+	}
+
+	return schema.KeyRange{
+		Start: start,
+		End:   end,
+	}, true
 }
 
-// calculateIntersection computes the overlapping range between two key ranges
-func calculateIntersection(range1, range2 schema.KeyRange) schema.KeyRange {
-	start := max(range1.Start, range2.Start)
-	end := min(range1.End, range2.End)
-	return schema.KeyRange{Start: start, End: end}
+// Helper function to consolidate overlapping key ranges
+func consolidateKeyRanges(ranges []schema.KeyRange) []schema.KeyRange {
+	if len(ranges) <= 1 {
+		return ranges
+	}
+
+	// Sort ranges by start key
+	sort.Slice(ranges, func(i, j int) bool {
+		return ranges[i].Start < ranges[j].Start
+	})
+
+	result := make([]schema.KeyRange, 0)
+	current := ranges[0]
+
+	for i := 1; i < len(ranges); i++ {
+		if current.End >= ranges[i].Start {
+			// Ranges overlap, merge them
+			if ranges[i].End > current.End {
+				current.End = ranges[i].End
+			}
+		} else {
+			// No overlap, add current to result and start new current
+			result = append(result, current)
+			current = ranges[i]
+		}
+	}
+	result = append(result, current)
+
+	return result
 }

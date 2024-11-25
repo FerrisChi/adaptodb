@@ -29,13 +29,16 @@ message KeyRangeList {
 message Member {
     uint64 id = 1;
     string addr = 2;
+    string user = 3;
+    string host = 4;
+    string ssh_key_path = 5;
 }
 
 message Members {
-    repeated Member members = 1;
+  repeated Member members = 1;
 }
 
 message GetConfigResponse {
   map<uint64, KeyRangeList> shard_map = 1;
-  map<uint64, Members> shard_addr_map = 2;
+  map<uint64, Members> members = 2;
 }

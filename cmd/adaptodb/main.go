@@ -76,12 +76,12 @@ func main() {
 
 	for _, group := range config.RaftGroups {
 		groupMembers := make(map[uint64]string)
-		for nodeID, nodeInfo := range group.Members {
-			groupMembers[nodeID] = nodeInfo.Address
+		for _, nodeInfo := range group.Members {
+			groupMembers[nodeInfo.ID] = nodeInfo.Address
 		}
 		keyRanges := metadata.GetShardKeyRanges(group.ShardID)
 
-		for nodeID, nodeInfo := range group.Members {
+		for _, nodeInfo := range group.Members {
 			var ssh *SSHConfig
 			if IsLocalAddress(nodeInfo.Address) {
 				ssh = nil
@@ -93,16 +93,16 @@ func main() {
 				}
 			}
 			spec := NodeSpec{
-				ID:      nodeID,
+				ID:      nodeInfo.ID,
 				Address: nodeInfo.Address,
 				SSH:     ssh,
 				GroupID: group.ShardID,
-				DataDir: fmt.Sprintf("tmp/data/node%d", nodeID),
-				WalDir:  fmt.Sprintf("tmp/wal/node%d", nodeID),
+				DataDir: fmt.Sprintf("tmp/data/node%d", nodeInfo.ID),
+				WalDir:  fmt.Sprintf("tmp/wal/node%d", nodeInfo.ID),
 			}
 
 			if err := launcher.Launch(spec, groupMembers, keyRanges); err != nil {
-				log.Fatalf("failed to launch node %d: %v", nodeID, err)
+				log.Fatalf("failed to launch node %d: %v", nodeInfo.ID, err)
 			}
 		}
 	}

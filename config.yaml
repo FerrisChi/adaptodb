@@ -1,21 +1,21 @@
 raftGroups:
   - shardID: 1
     members:
-      1:
-        address: "localhost:63001"
-      2:
+      - id: 1
+        address: "localhost:63001" # ip:port
+      - id: 2
         address: "localhost:63002"
-      3:
+      - id: 3
         address: "127.0.0.1:63003"
   - shardID: 2
     members:
-      4:
+      - id: 4
         address: "localhost:64001"
-      5:
+      - id: 5
         address: "localhost:64002"
-      6:
+      - id: 6
         address: "localhost:64003"
-    # 7:
+    # - id: 7
     #   host: "remote-host"
     #   user: "root"
     #   password: "root"

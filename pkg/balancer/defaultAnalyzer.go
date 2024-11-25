@@ -18,30 +18,30 @@ func NewDefaultAnalyzer(strategy string, metadata *metadata.Metadata) Analyzer {
 	}
 }
 
-func (a *DefaultAnalyzer) AnalyzeLoads() ([]schema.ShardMetadata, bool) {
+func (a *DefaultAnalyzer) AnalyzeLoads() ([]schema.Schedule, bool) {
 
 	// 1. collect metrics
 	loads, err := a.collectMetrics()
 	if err != nil {
 		log.Printf("Failed to collect metrics: %v", err)
-		return []schema.ShardMetadata{}, false
+		return []schema.Schedule{}, false
 	}
 
 	// 2. detect imbalances
 	imbalancedShards, err := a.detectImbalanceShards(loads)
 	if err != nil {
 		log.Printf("Failed to detect imbalanced shards: %v", err)
-		return []schema.ShardMetadata{}, false
+		return []schema.Schedule{}, false
 	}
 	if len(imbalancedShards) == 0 {
-		return []schema.ShardMetadata{}, false
+		return []schema.Schedule{}, false
 	}
 
 	// 3. create new schedules
 	newSchedules, err := a.createShardSchedules(imbalancedShards, loads, a.strategy)
 	if err != nil {
 		log.Printf("Failed to create new schedules: %v", err)
-		return []schema.ShardMetadata{}, false
+		return []schema.Schedule{}, false
 	}
 
 	return newSchedules, len(newSchedules) > 0
@@ -63,8 +63,8 @@ func (a *DefaultAnalyzer) collectMetrics() ([]*ShardMetrics, error) {
 }
 
 // Create new shard key range schedules for the imbalanced shards
-func (a *DefaultAnalyzer) createShardSchedules(imbalancedShards []uint64, loads []*ShardMetrics, strategy string) ([]schema.ShardMetadata, error) {
-	newSchedules := make([]schema.ShardMetadata, 0)
+func (a *DefaultAnalyzer) createShardSchedules(imbalancedShards []uint64, loads []*ShardMetrics, strategy string) ([]schema.Schedule, error) {
+	newSchedules := make([]schema.Schedule, 0)
 	// Example: Dummy logic to create new schedules
 	for _, idx := range imbalancedShards {
 		// create a new key range based on the strategy
@@ -73,9 +73,9 @@ func (a *DefaultAnalyzer) createShardSchedules(imbalancedShards []uint64, loads 
 		if orig_ranges == nil {
 			continue
 		}
-		newSchedules = append(newSchedules, schema.ShardMetadata{
-			ShardID:  shardID,
-			KeyRange: orig_ranges[0],
+		newSchedules = append(newSchedules, schema.Schedule{
+			ShardID:   shardID,
+			KeyRanges: orig_ranges,
 		})
 	}
 	return newSchedules, nil

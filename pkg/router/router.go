@@ -90,15 +90,15 @@ func (r *Router) GetConfig(ctx context.Context, req *pb.GetConfigRequest) (*pb.G
 		result[k] = &pb.KeyRangeList{KeyRanges: ranges}
 	}
 
-	addrMap := make(map[uint64]*pb.Members)
+	memberMap := make(map[uint64]*pb.Members)
 	for _, v := range r.metadata.GetAllShardMembers() {
 		shardId := v.ShardID
 		members := make([]*pb.Member, 0, len(v.Members))
-		for idx, nodeInfo := range v.Members {
-			members = append(members, &pb.Member{Id: idx, Addr: nodeInfo.Address})
+		for _, nodeInfo := range v.Members {
+			members = append(members, &pb.Member{Id: nodeInfo.ID, Addr: nodeInfo.Address, User: nodeInfo.User, Host: nodeInfo.Host, SshKeyPath: nodeInfo.SSHKeyPath})
 		}
-		addrMap[shardId] = &pb.Members{Members: members}
+		memberMap[shardId] = &pb.Members{Members: members}
 	}
 
-	return &pb.GetConfigResponse{ShardMap: result, ShardAddrMap: addrMap}, nil
+	return &pb.GetConfigResponse{ShardMap: result, Members: memberMap}, nil
 }

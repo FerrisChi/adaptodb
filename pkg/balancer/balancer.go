@@ -20,7 +20,7 @@ type ShardMetrics struct {
 }
 
 type Analyzer interface {
-	AnalyzeLoads() ([]schema.ShardMetadata, bool)
+	AnalyzeLoads() ([]schema.Schedule, bool)
 }
 
 type Balancer struct {
@@ -58,16 +58,19 @@ func (b *Balancer) StartMonitoring() {
 	}
 }
 
-func (c *Balancer) sendShardUpdate(newSchedule []schema.ShardMetadata) {
-	protoSchedule := make([]*pb.ShardMetadata, 0, len(newSchedule))
+func (c *Balancer) sendShardUpdate(newSchedule []schema.Schedule) {
+	protoSchedule := make([]*pb.Schedule, 0, len(newSchedule))
 	for _, shard := range newSchedule {
-		protoSchedule = append(protoSchedule, &pb.ShardMetadata{
+		schedule := &pb.Schedule{
 			ShardId: shard.ShardID,
-			KeyRange: &pb.KeyRange{
-				Start: shard.KeyRange.Start,
-				End:   shard.KeyRange.End,
-			},
-		})
+		}
+		for _, keyRange := range shard.KeyRanges {
+			schedule.KeyRanges = append(schedule.KeyRanges, &pb.KeyRange{
+				Start: keyRange.Start,
+				End:   keyRange.End,
+			})
+		}
+		protoSchedule = append(protoSchedule, schedule)
 	}
 
 	req := &pb.UpdateScheduleRequest{Schedule: protoSchedule}

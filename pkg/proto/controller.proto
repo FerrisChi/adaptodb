@@ -10,13 +10,13 @@ message KeyRange {
   string end = 2;
 }
 
-message ShardMetadata {
-  uint64 shard_id = 1;
-  KeyRange key_range = 2;
+message Schedule {
+  uint64 ShardId = 1;
+  repeated KeyRange KeyRanges = 2;
 }
 
 message UpdateScheduleRequest {
-  repeated ShardMetadata schedule = 1;
+  repeated Schedule schedule = 1;
 }
 
 message UpdateScheduleResponse {
