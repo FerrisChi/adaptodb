@@ -3,8 +3,10 @@
         {
             "type": "process",
             "label": "Build and run adaptodb",
-            "command": "export PATH=\"$PATH:$(go env GOPATH)/bin\" && make build && ./adaptodb",
+            "command": "sh",
             "args": [
+                "-c",
+                "export PATH=\"$PATH:$(go env GOPATH)/bin\" && make build && ./bin/debug/adaptodb && ./kill-ports.sh"
             ],
             "options": {
                 "cwd": "${workspaceFolder}"
@@ -21,9 +23,11 @@
         },
         {
             "type": "process",
-            "label": "Build all",
-            "command": "export PATH=\"$PATH:$(go env GOPATH)/bin\" && make build",
+            "label": "Build all and cleanup",
+            "command": "sh",
             "args": [
+                "-c",
+                "export PATH=\"$PATH:$(go env GOPATH)/bin\" && make build && ./kill-ports.sh"
             ],
             "options": {
                 "cwd": "${workspaceFolder}"

@@ -5,7 +5,7 @@ An Adaptive shard-balancing key-value database
 
 0. If you are migrating from dragonboat v4 to v3, please delete the `tmp/` data generated from previous runs first: `rm -r tmp/`
 1. Download go mods: `go mod tidy`
-2. Make the repo: `make build`
+2. Make the project: `make`
 
 > If you run into an error like:
 > ```
@@ -13,33 +13,42 @@ An Adaptive shard-balancing key-value database
 > Please specify a program using absolute path or make sure the program is available in > your PATH system variable
 > --go-grpc_out: protoc-gen-go-grpc: Plugin failed with status code 1.
 > ```
-> Make sure the [gRPC](https://grpc.io/docs/languages/go/quickstart/) plugins (`protoc-gen-go` and `protoc-gen-go-grpc`) are installed by running
+> Make sure `protobuf` and the [gRPC](https://grpc.io/docs/languages/go/quickstart/) plugins (`protoc-gen-go` and `protoc-gen-go-grpc`) are installed by running
 > ```shell
 > $ go install google.golang.org/protobuf/cmd/protoc-gen-go
 > $ go install google.golang.org/grpc/cmd/protoc-gen-go-grpc
 > $ export PATH="$PATH:$(go env GOPATH)/bin"
 > ```
 
-3. Run the executable: `./adaptodb`
+3. Run the executable: `./bin/{release|debug}/adaptodb`
 
 ## Ports
-* Controller
-  * grpc: 60082
-  * Handle new schedule advice from balancer.
-* Controller Router
-  * http: 60080
-  * gprc: 60081
-  * Handle metadata query.
-* Dragonboat node router
-  * grpc: 51000 + node id
-  * Handle read/write request from client and manipulate statemachine.
-* Dragonboat internal
-  * ip:port set in `config.yaml`
-  * Hanlde dragonboat internal communication.
+* AdaptoDB
+  * Controller <-> Balancer (within Controller)
+    * gRPC: 60082
+    * Handle new schedule advice from balancer.
+  * Controller Router <-> Client
+    * HTTP: 60080
+    * gRPC: 60081
+    * Handle metadata query.
+
+* Node
+  * Node (router) <-> Client
+    * gRPC: 51000 + node id
+    * Handle read/write request from client and manipulate statemachine.
+  * Node (router) <-> Node
+    * WebSocket: 52000 + node id
+    * Handle data transfer for load balancing.
+  * Node (statsServer) <-> Balancer
+    * gRPC: 53000 + node id
+    * Transferring stats.
+  * Dragonboat internal (Raft)
+    * IP:port set in `config.yaml`
+    * Hanlde dragonboat internal communication.
 
 ## Access AdaptoDB
 ### Use client
-`./client`
+`./bin/{release|debug}/client`
 
 ### APIs
 #### Get the shard metadata:

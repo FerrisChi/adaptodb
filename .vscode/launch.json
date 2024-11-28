@@ -14,7 +14,7 @@
             "env": {},
             "cwd": "${workspaceFolder}",
             "console": "integratedTerminal",
-            "preLaunchTask": "Build all",
+            "preLaunchTask": "Build all and cleanup",
         },
         {
             "name": "Launch Client",
@@ -26,7 +26,7 @@
             "env": {},
             "cwd": "${workspaceFolder}",
             "console": "integratedTerminal",
-            "preLaunchTask": "Build all",
+            "preLaunchTask": "Build all and cleanup",
         },
         {
             "name": "Attach to Remote Debug Session",
