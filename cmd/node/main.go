@@ -137,14 +137,14 @@ func main() {
 	log.Printf("KeyRange: %s", *keyrange)
 	
 	// Initialize NodeStatsServer
-	statsServer := &NodeStatsServer{}
+	statsServer := NewNodeStatsServer(nh, *groupID)
 
 	// Start gRPC server for stats
 	statsGrpcServer := grpc.NewServer()
 	pb.RegisterNodeStatsServer(statsGrpcServer, statsServer)
 	reflection.Register(statsGrpcServer)
 
-	statsGrpcAddress := fmt.Sprintf("localhost:%d", 52000+*nodeID)
+	statsGrpcAddress := fmt.Sprintf("localhost:%d", 53000+*nodeID)
 	lis, err := net.Listen("tcp", statsGrpcAddress)
 	if err != nil {
 		log.Fatalf("failed to listen on port %s: %v", statsGrpcAddress, err)

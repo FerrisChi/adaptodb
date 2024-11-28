@@ -1,0 +1,19 @@
+syntax = "proto3";
+
+package proto;
+option go_package = "adaptodb/pkg/proto";
+
+import "google/protobuf/timestamp.proto";
+
+service NodeStats {
+    rpc GetStats(GetStatsRequest) returns (GetStatsResponse);
+}
+
+message GetStatsRequest {}
+
+message GetStatsResponse {
+    int64 entries = 1;
+    int64 successfulRequests = 2;
+    int64 failedRequests = 3;
+    google.protobuf.Timestamp lastResetTime = 4;
+}

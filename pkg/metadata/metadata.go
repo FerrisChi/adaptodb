@@ -8,13 +8,13 @@ import (
 
 type Metadata struct {
 	KeysToShardID map[string]uint64 `yaml:"keys_to_shard_id" json:"keys_to_shard_id"`
-	config        *schema.Config
+	Config        *schema.Config
 }
 
 func NewMetadata(config *schema.Config) (*Metadata, error) {
 	m := &Metadata{
 		KeysToShardID: make(map[string]uint64),
-		config:        config,
+		Config:        config,
 	}
 
 	// Initialize shard mapping from config
@@ -26,7 +26,7 @@ func NewMetadata(config *schema.Config) (*Metadata, error) {
 			endchar = '{'
 		}
 		log.Printf("Shard %d: %c-%c\n", group.ShardID, startchar, endchar)
-		m.config.RaftGroups[idx].KeyRanges = append(m.config.RaftGroups[idx].KeyRanges, schema.KeyRange{
+		m.Config.RaftGroups[idx].KeyRanges = append(m.Config.RaftGroups[idx].KeyRanges, schema.KeyRange{
 			// Initialize with full range - will be adjusted during reconciliation
 			Start: string(startchar),
 			End:   string(endchar),
@@ -65,7 +65,7 @@ func (m *Metadata) AddKey(key string, shardID uint64) {
 
 // GetShardForKey returns the shard ID for a given key
 func (ms *Metadata) GetShardForKey(key string) (uint64, error) {
-	for _, shard := range ms.config.RaftGroups {
+	for _, shard := range ms.Config.RaftGroups {
 		for _, keyRange := range shard.KeyRanges {
 			if key >= keyRange.Start && key < keyRange.End {
 				return shard.ShardID, nil
@@ -92,7 +92,7 @@ func (ms *Metadata) GetShardForKey(key string) (uint64, error) {
 // }
 
 func (ms *Metadata) GetShardKeyRanges(shardID uint64) []schema.KeyRange {
-	for _, shard := range ms.config.RaftGroups {
+	for _, shard := range ms.Config.RaftGroups {
 		if shard.ShardID == shardID {
 			return shard.KeyRanges
 		}
@@ -103,19 +103,19 @@ func (ms *Metadata) GetShardKeyRanges(shardID uint64) []schema.KeyRange {
 // GetAllShardKeyRanges returns all key ranges for each shard
 func (ms *Metadata) GetAllShardKeyRanges() (map[uint64][]schema.KeyRange, error) {
 	ranges := make(map[uint64][]schema.KeyRange)
-	for _, shard := range ms.config.RaftGroups {
+	for _, shard := range ms.Config.RaftGroups {
 		ranges[shard.ShardID] = shard.KeyRanges
 	}
 	return ranges, nil
 }
 
 func (ms *Metadata) GetAllShardMembers() []schema.RaftGroup {
-	return ms.config.RaftGroups
+	return ms.Config.RaftGroups
 }
 
 // GetNodeInfo returns the node info for a given node ID, {} if not found
 func (ms *Metadata) GetNodeInfo(nodeID uint64) schema.NodeInfo {
-	for _, group := range ms.config.RaftGroups {
+	for _, group := range ms.Config.RaftGroups {
 		for _, node := range group.Members {
 			if node.ID == nodeID {
 				return node
@@ -136,7 +136,7 @@ func (ms *Metadata) GetNodeInfoBatch(nodeIDs []uint64) []schema.NodeInfo {
 
 // GetShard returns the Raft cluster configuration
 func (ms *Metadata) GetShard(shardID uint64) schema.RaftGroup {
-	for _, group := range ms.config.RaftGroups {
+	for _, group := range ms.Config.RaftGroups {
 		if group.ShardID == shardID {
 			return group
 		}
@@ -151,4 +151,12 @@ func (ms *Metadata) GetShardBatch(shardIDs []uint64) []schema.RaftGroup {
 		groups = append(groups, ms.GetShard(shardID))
 	}
 	return groups
+}
+
+func (ms *Metadata) GetNumNodes() int {
+	numNodes := 0
+	for _, group := range ms.Config.RaftGroups {
+		numNodes += len(group.Members)
+	}
+	return numNodes
 }

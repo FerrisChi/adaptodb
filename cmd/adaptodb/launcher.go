@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 
 	"golang.org/x/crypto/ssh"
@@ -58,7 +59,12 @@ func (l *Launcher) Launch(spec NodeSpec, members map[uint64]string, keyRanges []
 }
 
 func (l *Launcher) launchLocal(spec NodeSpec, members map[uint64]string, keyRanges []schema.KeyRange) error {
-	cmd := exec.Command("./node",
+	port, _ := strconv.Atoi(spec.Address[strings.LastIndex(spec.Address, ":")+1:])
+	_debugPort := port + 100
+	fmt.Println("debug port: ", _debugPort)
+	
+	cmd := exec.Command("./bin/release/node", // use this in production
+	// cmd := exec.Command("dlv", "exec", "./bin/debug/node", "--headless", fmt.Sprintf("--listen=:%d", debugPort), "--api-version=2", "--", // use this in development
 		"--id", fmt.Sprintf("%d", spec.ID),
 		"--group-id", fmt.Sprintf("%d", spec.GroupID),
 		"--address", spec.Address,

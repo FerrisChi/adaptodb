@@ -2,8 +2,16 @@ package balancer
 
 import (
 	"adaptodb/pkg/metadata"
+	pb "adaptodb/pkg/proto/proto"
 	"adaptodb/pkg/schema"
+	"context"
+	"fmt"
 	"log"
+	"strings"
+	"time"
+
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
 type DefaultAnalyzer struct {
@@ -47,23 +55,85 @@ func (a *DefaultAnalyzer) AnalyzeLoads() ([]schema.Schedule, bool) {
 	return newSchedules, len(newSchedules) > 0
 }
 
-func (a *DefaultAnalyzer) detectImbalanceShards(loads []*ShardMetrics) ([]uint64, error) {
+func (a *DefaultAnalyzer) detectImbalanceShards(loads []*NodeMetrics) ([]uint64, error) {
 	var imbalancedShards []uint64
+	avgEntries := 0.0
 	for _, load := range loads {
-		if load.CPU > 80.0 || load.Memory > 1<<30 { // 1 GiB
-			imbalancedShards = append(imbalancedShards, load.ShardID)
+		avgEntries += float64(load.NumEntries)	
+	}
+	avgEntries /= float64(len(loads))
+	
+	// If a shard is responsible for more than twice the average number of entries, it is considered imbalanced
+	for idx, load := range loads {
+		if float64(load.NumEntries) > avgEntries * 2 {
+			imbalancedShards = append(imbalancedShards, uint64(idx))
 		}
 	}
 	return imbalancedShards, nil
 }
 
-func (a *DefaultAnalyzer) collectMetrics() ([]*ShardMetrics, error) {
-	// Example: Dummy logic to collect shard metrics
-	return []*ShardMetrics{}, nil
+func queryNodeStats(nodeAddress string) (*NodeMetrics, error) {
+	conn, err := grpc.NewClient(nodeAddress, grpc.WithTransportCredentials(insecure.NewCredentials()))
+
+	if err != nil {
+		log.Fatalf("Failed to connect to gRPC server: %v", err)
+		return nil, err
+	}
+	defer conn.Close()
+
+	client := pb.NewNodeStatsClient(conn)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	resp, err := client.GetStats(ctx, &pb.GetStatsRequest{})
+	if err != nil {
+		log.Fatalf("Failed to get stats: %v", err)
+		return nil, err
+	}
+
+	return &NodeMetrics{
+		NumEntries: resp.Entries,
+		NumSuccessfulRequets: resp.SuccessfulRequests,
+		NumFailedRequests: resp.FailedRequests,
+		LastResetTime: resp.LastResetTime.AsTime(),
+	}, nil
+}
+
+func (a *DefaultAnalyzer) collectMetrics() ([]*NodeMetrics, error) {
+	// Use gRPC to collect metrics from each shard	
+	var ret []*NodeMetrics
+	for _, shard := range a.metadata.Config.RaftGroups {
+		// Try to query all members of the shard
+		for _, member := range shard.Members {
+			statsAddr := fmt.Sprintf("%s:%d", strings.Split(member.Address, ":")[0], 53000+member.ID)
+			log.Printf("Querying node stats for %s", statsAddr)
+			res, err := queryNodeStats(statsAddr)
+			if err != nil {
+				log.Printf("Failed to query node stats: %v", err)
+				ret = append(ret, &NodeMetrics{
+					ShardID: shard.ShardID,
+					NodeID: member.ID,
+					NumEntries: -1,
+					NumSuccessfulRequets: -1,
+					NumFailedRequests: -1,
+				})
+			} else {
+				log.Printf("Node %d in Shard %d has %d entries:", member.ID, shard.ShardID, res.NumEntries)
+				log.Println("Successful Requests: ", res.NumSuccessfulRequets)
+				log.Println("Failed Requests: ", res.NumFailedRequests)
+				log.Println("Last Reset Time: ", res.LastResetTime)
+				res.ShardID = shard.ShardID
+				res.NodeID = member.ID
+				ret = append(ret, res)
+			}
+		}
+	}
+
+	return ret, nil
 }
 
 // Create new shard key range schedules for the imbalanced shards
-func (a *DefaultAnalyzer) createShardSchedules(imbalancedShards []uint64, loads []*ShardMetrics, strategy string) ([]schema.Schedule, error) {
+func (a *DefaultAnalyzer) createShardSchedules(imbalancedShards []uint64, loads []*NodeMetrics, strategy string) ([]schema.Schedule, error) {
 	newSchedules := make([]schema.Schedule, 0)
 	// Example: Dummy logic to create new schedules
 	for _, idx := range imbalancedShards {

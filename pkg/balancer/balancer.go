@@ -12,11 +12,29 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 )
 
-type ShardMetrics struct {
+// The Balancer will periodically query *all* nodes for their current
+// NodeMetrics, analyze the loads, and send new schedules to the controller.
+// Every time a node is queried and *successfully* responded, the node
+// will reset its metrics, hence `LastResetTime`. Under normal circumstances,
+// the `LastResetTime` of all nodes should be similar so that the stats
+// are comparable. If not, it might indicate that some nodes failed to respond
+// to the previous requests, so the Balancer might want to take that into
+// account as well.
+//
+// Similarly, if any metric for a node is negative, it might indicate an error
+// on the node. The Balancer could then assume the node is down and try to
+// recover it. For now, we don't collect CPU and memory metrics because all
+// nodes are running locally.
+type NodeMetrics struct {
 	ShardID uint64
-	CPU     float64
-	Memory  float64
-	QPS     int64
+	NodeID uint64
+	NumEntries int64
+	NumSuccessfulRequets int64
+	NumFailedRequests int64
+	LastResetTime time.Time
+	// CPU     float64
+	// Memory  float64
+	// QPS     int64
 }
 
 type Analyzer interface {

@@ -8,6 +8,7 @@ import (
 
 	pb "adaptodb/pkg/proto/proto"
 	"adaptodb/pkg/schema"
+	"adaptodb/pkg/sm"
 
 	"github.com/lni/dragonboat/v3"
 )
@@ -16,14 +17,16 @@ type Router struct {
 	node      *dragonboat.NodeHost
 	clusterID uint64
 	keyRanges []schema.KeyRange
+	statsServer *NodeStatsServer
 	pb.UnimplementedNodeRouterServer
 }
 
-func NewRouter(nh *dragonboat.NodeHost, clusterID uint64, keyranges []schema.KeyRange) *Router {
+func NewRouter(nh *dragonboat.NodeHost, clusterID uint64, keyranges []schema.KeyRange, statsServer *NodeStatsServer) *Router {
 	return &Router{
 		node:      nh,
 		clusterID: clusterID,
 		keyRanges: keyranges,
+		statsServer: statsServer,
 	}
 }
 
@@ -46,9 +49,15 @@ func (r *Router) Read(ctx context.Context, req *pb.ReadRequest) (*pb.ReadRespons
 	defer cancel()
 	data, error := r.node.SyncRead(ctx, r.clusterID, req.Key) // Using shardID 1, adjust as needed
 	if error != nil {
+		r.statsServer.IncrementFailedRequests()
 		return nil, error
 	}
-	return &pb.ReadResponse{Value: data.(string)}, nil
+	r.statsServer.IncrementSuccessfulRequests()
+	lookupResult, ok := data.(sm.LookupResult)
+	if !ok {
+		return nil, errors.New("failed to assert data as sm.LookupResult")
+	}
+	return &pb.ReadResponse{Value: lookupResult.Value}, nil
 }
 
 func (r *Router) Write(ctx context.Context, req *pb.WriteRequest) (*pb.WriteResponse, error) {
@@ -73,7 +82,9 @@ func (r *Router) Write(ctx context.Context, req *pb.WriteRequest) (*pb.WriteResp
 	data := []byte(fmt.Sprintf("write:%s,%s", req.GetKey(), req.GetValue()))
 	result, error := r.node.SyncPropose(ctx, session, data)
 	if error != nil {
+		r.statsServer.IncrementFailedRequests()
 		return nil, error
 	}
+	r.statsServer.IncrementSuccessfulRequests()
 	return &pb.WriteResponse{Status: result.Value}, nil
 }
