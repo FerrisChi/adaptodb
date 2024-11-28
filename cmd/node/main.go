@@ -184,5 +184,6 @@ func main() {
 	<-sig
 	nh.Stop()
 	nodeGrpcServer.Stop()
+	statsGrpcServer.Stop()
 	log.Println("Node stopped")
 }
