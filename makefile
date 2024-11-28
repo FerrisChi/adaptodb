@@ -1,4 +1,4 @@
-GOCMD=go build
+GOCMD=go build -gcflags=all="-N -l" # add -gcflags=all="-N -l" for debugging
 
 build: proto
 	$(GOCMD) -o adaptodb ./cmd/adaptodb

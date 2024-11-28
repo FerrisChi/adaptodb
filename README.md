@@ -24,11 +24,11 @@ An Adaptive shard-balancing key-value database
 
 ## Ports
 * Controller
-  * grpc: 8082
+  * grpc: 60082
   * Handle new schedule advice from balancer.
 * Controller Router
-  * http: 8080
-  * gprc: 8081
+  * http: 60080
+  * gprc: 60081
   * Handle metadata query.
 * Dragonboat node router
   * grpc: 51000 + node id
@@ -44,7 +44,7 @@ An Adaptive shard-balancing key-value database
 ### APIs
 #### Get the shard metadata:
 
-`grpcurl -plaintext -d '{}' localhost:8081 proto.ShardRouter/GetConfig`
+`grpcurl -plaintext -d '{}' localhost:60081 proto.ShardRouter/GetConfig`
 
 #### Read/Write:
 
@@ -63,12 +63,12 @@ An Adaptive shard-balancing key-value database
 
 1. http
 
-   `curl "http://localhost:8080/?key=key123"`
+   `curl "http://localhost:60080/?key=key123"`
 
 2. grpc
    
    Note: install grpcurl via `brew install grpcurl` if running for the first time
-`grpcurl -plaintext -d '{"key":"test-key"}' localhost:8081 proto.ShardRouter/GetShard`
+`grpcurl -plaintext -d '{"key":"test-key"}' localhost:60081 proto.ShardRouter/GetShard`
 
 
 ## Code
@@ -105,3 +105,10 @@ config.yaml
 makefile
 ```
 
+## Debugging
+
+- To debug a node spawned by the Controller, you need to attach the debugger to a running process. Run the `Attch to Process` task in VSCode's debugger and search for `node` to attach the debugger to the given node.
+  
+- When a program exited unexpectedly (e.g., as a result of `log.Fatalf()`), run `kill-ports.sh` to cleanup the remaining processes that are still running.
+
+- If a process was terminated abnormally, it might not release the lock to its data. In which case, you might need to `rm -r tmp/` to remove all stale data and restart the nodes.

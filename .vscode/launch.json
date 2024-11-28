@@ -24,7 +24,25 @@
             "args": [],
             "env": {},
             "cwd": "${workspaceFolder}",
-            "console": "integratedTerminal"
+            "console": "integratedTerminal",
+            // "preLaunchTask": "Build and run adaptodb"
+        },
+        // {
+        //     "name": "Attach to Node 1 - 1",
+        //     "type": "go",
+        //     "request": "attach",
+        //     "mode": "remote",
+        //     "remotePath": "${workspaceFolder}",
+        //     "port": 63101,
+        //     "host": "127.0.0.1",
+        //     "apiVersion": 2,
+        // },
+        {
+            "name": "Attach to Process",
+            "type": "go",
+            "request": "attach",
+            "mode": "local",
+            "processId": "${command:pickProcess}"
         }
     ]
 }

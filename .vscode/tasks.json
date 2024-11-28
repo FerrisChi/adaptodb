@@ -1,0 +1,24 @@
+{
+    "tasks": [
+        {
+            "type": "cppbuild",
+            "label": "Build and run adaptodb",
+            "command": "export PATH=\"$PATH:$(go env GOPATH)/bin\" && make build && ./adaptodb",
+            "args": [
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            // "problemMatcher": [
+            //     "$gcc"
+            // ],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "isBackground": true,
+
+        }
+    ],
+    "version": "2.0.0"
+}
