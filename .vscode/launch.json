@@ -13,7 +13,8 @@
             "args": [],
             "env": {},
             "cwd": "${workspaceFolder}",
-            "console": "integratedTerminal"
+            "console": "integratedTerminal",
+            "preLaunchTask": "Build all",
         },
         {
             "name": "Launch Client",
@@ -25,24 +26,23 @@
             "env": {},
             "cwd": "${workspaceFolder}",
             "console": "integratedTerminal",
-            // "preLaunchTask": "Build and run adaptodb"
+            "preLaunchTask": "Build all",
         },
-        // {
-        //     "name": "Attach to Node 1 - 1",
-        //     "type": "go",
-        //     "request": "attach",
-        //     "mode": "remote",
-        //     "remotePath": "${workspaceFolder}",
-        //     "port": 63101,
-        //     "host": "127.0.0.1",
-        //     "apiVersion": 2,
-        // },
+        {
+            "name": "Attach to Remote Debug Session",
+            "type": "go",
+            "request": "attach",
+            "mode": "remote",
+            "remotePath": "",
+            "host": "127.0.0.1", // edit host and port to attach to a remote debug session
+            "port": 2345,
+        },
         {
             "name": "Attach to Process",
             "type": "go",
             "request": "attach",
             "mode": "local",
-            "processId": "${command:pickProcess}"
+            "processId": "${command:pickProcess}",
         }
     ]
 }
