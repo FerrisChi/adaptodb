@@ -5,6 +5,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"os"
@@ -23,6 +24,8 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
 )
+
+
 
 func parseMembers(m string) (map[uint64]string, error) {
 	membersMap := make(map[uint64]string)
@@ -86,7 +89,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("failed to open log file: %v", err)
 	}
-	log.SetOutput(logFile)
+	log.SetOutput(io.MultiWriter(os.Stdout, logFile))
 
 	if runtime.GOOS == "darwin" {
 		signal.Ignore(syscall.Signal(0xd))
@@ -132,17 +135,38 @@ func main() {
 	log.Printf("WALDir: %s", *walDir)
 	log.Printf("Members: %s", *members)
 	log.Printf("KeyRange: %s", *keyrange)
+	
+	// Initialize NodeStatsServer
+	statsServer := NewNodeStatsServer(nh, *groupID)
+
+	// Start gRPC server for stats
+	statsGrpcServer := grpc.NewServer()
+	pb.RegisterNodeStatsServer(statsGrpcServer, statsServer)
+	reflection.Register(statsGrpcServer)
+
+	statsGrpcAddress := fmt.Sprintf("localhost:%d", 53000+*nodeID)
+	lis, err := net.Listen("tcp", statsGrpcAddress)
+	if err != nil {
+		log.Fatalf("failed to listen on port %s: %v", statsGrpcAddress, err)
+	}
+	log.Printf("Listening on %s", statsGrpcAddress)
+
+	go func() {
+		if err := statsGrpcServer.Serve(lis); err != nil {
+			log.Fatalf("failed to serve: %v", err)
+		}
+	}()
 
 	// start grpc server for client communication
 	keyRanges := parseKeyRange(*keyrange)
 	log.Println("KeyRanges:", keyRanges)
-	router := NewRouter(nh, *groupID, keyRanges)
+	router := NewRouter(nh, *groupID, keyRanges, statsServer)
 	nodeGrpcServer := grpc.NewServer()
 	pb.RegisterNodeRouterServer(nodeGrpcServer, router)
 	reflection.Register(nodeGrpcServer)
 
 	nodeGrpcAddress := fmt.Sprintf("localhost:%d", 51000+*nodeID)
-	lis, err := net.Listen("tcp", nodeGrpcAddress)
+	lis, err = net.Listen("tcp", nodeGrpcAddress)
 	if err != nil {
 		log.Fatalf("failed to listen on port %s: %v", nodeGrpcAddress, err)
 	}
@@ -159,5 +183,7 @@ func main() {
 	signal.Notify(sig, syscall.SIGTERM)
 	<-sig
 	nh.Stop()
+	nodeGrpcServer.Stop()
+	statsGrpcServer.Stop()
 	log.Println("Node stopped")
 }

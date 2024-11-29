@@ -1,9 +1,19 @@
-GOCMD=go build
+GO_DEBUG_CMD=go build -gcflags=all="-N -l" # add -gcflags=all="-N -l" for debugging
+GO_RELEASE_CMD=go build
 
-build: proto
-	$(GOCMD) -o adaptodb ./cmd/adaptodb
-	$(GOCMD) -o client ./cmd/client
-	$(GOCMD) -o node ./cmd/node
+all: build
+
+build: debug release
+
+debug: proto
+	$(GO_DEBUG_CMD) -o ./bin/debug/adaptodb ./cmd/adaptodb
+	$(GO_DEBUG_CMD) -o ./bin/debug/client ./cmd/client
+	$(GO_DEBUG_CMD) -o ./bin/debug/node ./cmd/node
+
+release: proto
+	$(GO_RELEASE_CMD) -o ./bin/release/adaptodb ./cmd/adaptodb
+	$(GO_RELEASE_CMD) -o ./bin/release/client ./cmd/client
+	$(GO_RELEASE_CMD) -o ./bin/release/node ./cmd/node
 
 proto:
 	@echo "Generating protobuf code..."
@@ -19,4 +29,4 @@ clean:
 	rm -f node
 	rm -f pkg/*/proto/*.pb.go
 
-.PHONY: build clean proto
+.PHONY: build debug release clean proto

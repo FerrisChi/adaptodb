@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"net/http"
@@ -43,7 +44,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("failed to open log file: %v", err)
 	}
-	log.SetOutput(logFile)
+	log.SetOutput(io.MultiWriter(os.Stdout, logFile))
 
 	// Load configuration
 	config := schema.Config{}
@@ -114,7 +115,7 @@ func main() {
 	pb.RegisterControllerServer(controllerGrpcServer, controller)
 	reflection.Register(controllerGrpcServer)
 
-	controllerAddress := "localhost:8082"
+	controllerAddress := "localhost:60082"
 	lis, err := net.Listen("tcp", controllerAddress)
 	if err != nil {
 		log.Fatalf("failed to listen on port %s: %v", controllerAddress, err)
@@ -140,8 +141,8 @@ func main() {
 	go func() {
 		http.HandleFunc("/", router.HandleRequest)
 		http.HandleFunc("/config", router.HandleConfigRequest)
-		log.Printf("HTTP server listening on localhost:8080")
-		if err := http.ListenAndServe("localhost:8080", nil); err != nil {
+		log.Printf("HTTP server listening on localhost:60080")
+		if err := http.ListenAndServe("localhost:60080", nil); err != nil {
 			log.Fatalf("failed to start HTTP server: %v", err)
 		}
 	}()
@@ -151,7 +152,7 @@ func main() {
 	pb.RegisterShardRouterServer(routerGrpcServer, router)
 	reflection.Register(routerGrpcServer)
 
-	routerGrpcAddress := "localhost:8081"
+	routerGrpcAddress := "localhost:60081"
 	lis, err = net.Listen("tcp", routerGrpcAddress)
 	if err != nil {
 		log.Fatalf("failed to listen on port %s: %v", routerGrpcAddress, err)

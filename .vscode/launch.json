@@ -13,7 +13,8 @@
             "args": [],
             "env": {},
             "cwd": "${workspaceFolder}",
-            "console": "integratedTerminal"
+            "console": "integratedTerminal",
+            "preLaunchTask": "Build all and cleanup",
         },
         {
             "name": "Launch Client",
@@ -24,7 +25,24 @@
             "args": [],
             "env": {},
             "cwd": "${workspaceFolder}",
-            "console": "integratedTerminal"
+            "console": "integratedTerminal",
+            "preLaunchTask": "Build all and cleanup",
+        },
+        {
+            "name": "Attach to Remote Debug Session",
+            "type": "go",
+            "request": "attach",
+            "mode": "remote",
+            "remotePath": "",
+            "host": "127.0.0.1", // edit host and port to attach to a remote debug session
+            "port": 2345,
+        },
+        {
+            "name": "Attach to Process",
+            "type": "go",
+            "request": "attach",
+            "mode": "local",
+            "processId": "${command:pickProcess}",
         }
     ]
 }

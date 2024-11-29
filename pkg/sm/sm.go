@@ -5,12 +5,18 @@ import (
 	"encoding/gob"
 	"errors"
 	"io"
+	"strconv"
 
 	"github.com/lni/dragonboat/v3/statemachine"
 )
 
 type KVStore struct {
 	Data map[string]string `yaml:"data" json:"data"` // The key-value data store
+}
+
+type LookupResult struct {
+	Value string
+	NumEntries int64
 }
 
 // NewKVStore initializes and returns a new KVStore state machine instance.
@@ -28,12 +34,13 @@ func (s *KVStore) Lookup(query interface{}) (interface{}, error) {
 	}
 	value, exists := s.Data[key]
 	if !exists {
-		return nil, errors.New("key not found")
+		return LookupResult{Value: "", NumEntries: int64(len(s.Data))}, errors.New("key not found")
 	}
-	return value, nil
+	return LookupResult{Value: value, NumEntries: int64(len(s.Data))}, nil
 }
 
 // Update applies a mutation to the state machine. This handles write requests.
+// Returns status 1 if an old entry is modified, 2 if a new entry is added.
 func (s *KVStore) Update(data []byte) (statemachine.Result, error) {
 	ops := bytes.SplitN(data, []byte(";"), -1)
 	succ := 0
@@ -52,6 +59,11 @@ func (s *KVStore) Update(data []byte) (statemachine.Result, error) {
 				continue
 			}
 			key, value := string(kv[0]), string(kv[1])
+			_, ok := s.Data[key]
+			if !ok {
+				// increment counter if key is not found
+				succ++
+			}
 			s.Data[key] = value
 			succ++
 		default:
@@ -60,6 +72,8 @@ func (s *KVStore) Update(data []byte) (statemachine.Result, error) {
 		}
 	}
 
+	var b []byte
+	strconv.AppendInt(b, int64(len(s.Data)), 10)
 	return statemachine.Result{Value: uint64(succ)}, nil
 }
 

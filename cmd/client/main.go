@@ -38,7 +38,7 @@ func getShardForKey(key string) uint64 {
 
 	// make a request to the metadata service to get the shard for the key
 	// return the shard ID
-	request := fmt.Sprintf("http://localhost:8080?key=%s", key)
+	request := fmt.Sprintf("http://localhost:60080?key=%s", key)
 	resp, err := http.Get(request)
 	if err != nil {
 		log.Fatalf("Failed to get shard for key %s: %v", key, err)
@@ -56,7 +56,7 @@ func getShardMapping() map[uint64]Shard {
 	// make a grpc request to the metadata service to get the shard mapping
 	// return the mapping: shard ID -> list of key ranges
 
-	conn, err := grpc.NewClient("localhost:8081", grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.NewClient("localhost:60081", grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		log.Fatalf("Failed to connect to gRPC server: %v", err)
 	}
@@ -168,7 +168,7 @@ func process(parts []string) error {
 			if err != nil {
 				return fmt.Errorf("WRITE_FAILED %v", err)
 			} else {
-				fmt.Println("Write successful", status, "changed.")
+				fmt.Println("Write successful (status code: ", status, ").")
 			}
 		}
 	} else {
