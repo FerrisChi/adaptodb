@@ -1,0 +1,27 @@
+# Use a specific Alpine version
+FROM golang:1.22.2-alpine
+
+# Configure Alpine repositories and install dependencies
+# RUN echo "https://dl-cdn.alpinelinux.org/alpine/v3.19/main" > /etc/apk/repositories
+# RUN echo "https://dl-cdn.alpinelinux.org/alpine/v3.19/community" >> /etc/apk/repositories
+# RUN apk update
+RUN apk add --no-cache protoc protobuf-dev make git
+
+# Install protoc-gen-go and protoc-gen-go-grpc
+RUN go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
+RUN go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
+
+# Add protoc plugins to PATH
+ENV PATH="$PATH:$(go env GOPATH)/bin"
+
+WORKDIR /app
+COPY . .
+
+RUN make debug
+
+# RUN make release # for release build
+
+EXPOSE 51000-53000
+EXPOSE 63000-65000
+
+ENTRYPOINT ["./bin/debug/node"]
