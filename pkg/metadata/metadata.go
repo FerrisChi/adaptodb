@@ -2,8 +2,14 @@ package metadata
 
 import (
 	"adaptodb/pkg/schema"
+	"context"
 	"fmt"
 	"log"
+
+	pb "adaptodb/pkg/proto/proto"
+
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
 type Metadata struct {
@@ -159,4 +165,39 @@ func (ms *Metadata) GetNumNodes() int {
 		numNodes += len(group.Members)
 	}
 	return numNodes
+}
+
+func (ms *Metadata) UpdateMigratedKeyRanges(fromShardId, toShardId uint64, keyRanges []schema.KeyRange) {
+	for i, shard := range ms.Config.RaftGroups {
+		if shard.ShardID == fromShardId {
+			ms.Config.RaftGroups[i].KeyRanges = schema.RemoveKeyRanges(ms.Config.RaftGroups[i].KeyRanges, keyRanges)
+		}
+		if shard.ShardID == toShardId {
+			ms.Config.RaftGroups[i].KeyRanges = schema.AddKeyRanges(ms.Config.RaftGroups[i].KeyRanges, keyRanges)
+		}
+	}
+}
+
+// UpdateKeyRangeFromNode updates the key ranges for each shard from the first node in the shard
+func (ms *Metadata) UpdateKeyRangeFromNode() {
+	for i := range ms.Config.RaftGroups {
+		shard := &ms.Config.RaftGroups[i]
+		for _, node := range shard.Members {
+			conn, err := grpc.NewClient(node.RpcAddress, grpc.WithTransportCredentials(insecure.NewCredentials()))
+			if err != nil {
+				log.Printf("failed to connect to node %d: %v", node.ID, err)
+				continue
+			}
+			defer conn.Close()
+			client := pb.NewNodeRouterClient(conn)
+			resp, err := client.GetKeyRanges(context.Background(), &pb.GetKeyRangesRequest{ClusterID: shard.ShardID})
+			if err != nil {
+				log.Printf("failed to get shard mapping from node %d: %v", node.ID, err)
+				continue
+			}
+			shard.KeyRanges = schema.ParseKeyRanges(resp.KeyRanges)
+			log.Printf("Updated shard %d key ranges from node %d: %v", shard.ShardID, node.ID, shard.KeyRanges)
+			break
+		}
+	}
 }

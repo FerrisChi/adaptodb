@@ -7,14 +7,12 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"sort"
 )
 
 type Controller struct {
 	metadata *metadata.Metadata `yaml:"metadata" json:"metadata"`
 	pb.UnimplementedControllerServer
-	strategy string
-	operator *Operator
+	operators []*Operator
 }
 
 func NewController(metadata *metadata.Metadata) *Controller {
@@ -77,7 +75,7 @@ func (sc *Controller) performDataMigration(schedule []*schema.Schedule) error {
 	}
 
 	// Map to store migrations between shard pairs
-	migrations := make(map[string]*MigrationTask)
+	ops := make(map[string]*Operator)
 
 	// Gather all migrations between shard pairs
 	for _, newShard := range schedule {
@@ -108,23 +106,95 @@ func (sc *Controller) performDataMigration(schedule []*schema.Schedule) error {
 			// Create migration task only if there are intersections
 			if len(intersections) > 0 {
 				key := fmt.Sprintf("%d->%d", oldShardID, newShardID)
-				if _, exists := migrations[key]; !exists {
-					migrations[key] = &MigrationTask{
-						fromShardInfo: shards[0],
-						toShardInfo:   shards[1],
-						ranges:        intersections,
-					}
+				if _, exists := ops[key]; !exists {
+					ops[key] = NewOperator(shards[0], shards[1], intersections, nil)
 				}
 			}
 		}
 	}
-
 	// Consolidate overlapping ranges for each migration
-	for _, task := range migrations {
-		task.ranges = consolidateKeyRanges(task.ranges)
+	for _, op := range ops {
+		op.keyRanges = schema.ConsolidateKeyRanges(op.keyRanges)
+		sc.operators = append(sc.operators, op)
+
+		ctx, cancel := context.WithTimeout(context.Background(), schema.MIGRATION_TIMEOUT)
+		op.cancel = cancel
+		op.done = make(chan struct{})
+
+		// Launch migration in goroutine
+		err := op.migrate(ctx)
+
+		// Wait with timeout
+		if err != nil {
+			log.Printf("Migration failed: %v", err)
+		} else {
+			log.Printf("Migration completed")
+		}
+
+		go func(op *Operator) {
+			select {
+			case <-op.done:
+				log.Printf("Migration finished between shards %d and %d", op.fromShard.ShardID, op.toShard.ShardID)
+			case <-ctx.Done():
+				log.Printf("Migration timed out, initiating cancellation")
+				if err := op.cancelMigration(); err != nil {
+					log.Printf("Failed to cancel migration: %v", err)
+				}
+			}
+		}(op)
+	}
+	return nil
+}
+
+func (sc *Controller) findOperator(fromClusterID, toClusterID uint64) *Operator {
+	for _, op := range sc.operators {
+		if op.fromShard.ShardID == fromClusterID && op.toShard.ShardID == toClusterID {
+			return op
+		}
+	}
+	return nil
+}
+
+func (sc *Controller) findOperatorByTaskID(taskId uint64) *Operator {
+	for _, op := range sc.operators {
+		if op.taskId == taskId {
+			return op
+		}
+	}
+	return nil
+}
+
+func (sc *Controller) CancelMigrationFromNode(ctx context.Context, req *pb.CancelMigrationRequest) (*pb.CancelMigrationResponse, error) {
+	log.Println("Received request to cancel migration")
+	op := sc.findOperator(req.GetFromClusterID(), req.GetToClusterID())
+	if op == nil {
+		log.Panicln("Migration not found")
+	}
+	op.cancelMigration()
+
+	return &pb.CancelMigrationResponse{
+		Status: "OK",
+	}, nil
+}
+
+func (sc *Controller) FinishMigration(ctx context.Context, req *pb.FinishMigrationRequest) (*pb.FinishMigrationResponse, error) {
+	log.Println("Received transfer done notification")
+	op := sc.findOperatorByTaskID(req.GetTaskId())
+	if op == nil {
+		log.Panicln("Migration not found")
 	}
 
-	return nil
+	err := op.finishMigration()
+	if err != nil {
+		return nil, err
+	}
+
+	// update metadata
+	sc.metadata.UpdateMigratedKeyRanges(op.fromShard.ShardID, op.toShard.ShardID, op.keyRanges)
+
+	return &pb.FinishMigrationResponse{
+		Status: "OK",
+	}, nil
 }
 
 // Helper function to calculate intersection of two key ranges
@@ -148,35 +218,4 @@ func getKeyRangeIntersection(r1, r2 schema.KeyRange) (schema.KeyRange, bool) {
 		Start: start,
 		End:   end,
 	}, true
-}
-
-// Helper function to consolidate overlapping key ranges
-func consolidateKeyRanges(ranges []schema.KeyRange) []schema.KeyRange {
-	if len(ranges) <= 1 {
-		return ranges
-	}
-
-	// Sort ranges by start key
-	sort.Slice(ranges, func(i, j int) bool {
-		return ranges[i].Start < ranges[j].Start
-	})
-
-	result := make([]schema.KeyRange, 0)
-	current := ranges[0]
-
-	for i := 1; i < len(ranges); i++ {
-		if current.End >= ranges[i].Start {
-			// Ranges overlap, merge them
-			if ranges[i].End > current.End {
-				current.End = ranges[i].End
-			}
-		} else {
-			// No overlap, add current to result and start new current
-			result = append(result, current)
-			current = ranges[i]
-		}
-	}
-	result = append(result, current)
-
-	return result
 }

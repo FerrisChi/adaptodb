@@ -1,7 +1,6 @@
 package router
 
 import (
-	"adaptodb/pkg/controller"
 	"adaptodb/pkg/metadata"
 	pb "adaptodb/pkg/proto/proto"
 	"context"
@@ -16,14 +15,12 @@ import (
 
 type Router struct {
 	pb.UnimplementedShardRouterServer
-	controller *controller.Controller
-	metadata   *metadata.Metadata
+	metadata *metadata.Metadata
 }
 
-func NewRouter(sc *controller.Controller, metadata *metadata.Metadata) *Router {
+func NewRouter(metadata *metadata.Metadata) *Router {
 	return &Router{
-		controller: sc,
-		metadata:   metadata,
+		metadata: metadata,
 	}
 }
 
@@ -95,7 +92,7 @@ func (r *Router) GetConfig(ctx context.Context, req *pb.GetConfigRequest) (*pb.G
 		shardId := v.ShardID
 		members := make([]*pb.Member, 0, len(v.Members))
 		for _, nodeInfo := range v.Members {
-			members = append(members, &pb.Member{Id: nodeInfo.ID, Addr: nodeInfo.Address, User: nodeInfo.User, Host: nodeInfo.Host, SshKeyPath: nodeInfo.SSHKeyPath})
+			members = append(members, &pb.Member{Id: nodeInfo.ID, Addr: nodeInfo.RpcAddress, User: nodeInfo.User, SshKeyPath: nodeInfo.SSHKeyPath})
 		}
 		memberMap[shardId] = &pb.Members{Members: members}
 	}

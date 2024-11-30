@@ -68,6 +68,12 @@ An Adaptive shard-balancing key-value database
 
 `grpcurl -plaintext -d '{"clusterID": 1, "key": "hello", "value": "hello-dragonboat"}' localhost:51001 proto.NodeRouter/Write`
 
+#### Migrate
+
+`grpcurl -plaintext -d '{"taskId": 34, "fromClusterId": 1, "toClusterId": 4, "address": "localhost:52006", "keyRanges": [{"start": "a", "end": "l"}, {"start": "mz", "end": "{"}]}' localhost:51001 proto.NodeRouter/StartMigration`
+
+`grpcurl -plaintext -d '{"schedule": [{"shardId": 2, "keyRanges": [{"start": "h", "end": "m"}]}]}' localhost:60082 proto.Controller/UpdateSchedule`
+
 #### Get the shard id for key (test only)
 
 1. http

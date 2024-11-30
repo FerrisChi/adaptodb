@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"io"
 	"log"
 	"net"
 	"net/http"
@@ -10,6 +9,7 @@ import (
 	"os/signal"
 	"runtime"
 	"syscall"
+	"time"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
@@ -30,12 +30,13 @@ type SSHConfig struct {
 	KeyPath string // path to private key
 }
 type NodeSpec struct {
-	ID      uint64
-	Address string     // Raft address
-	SSH     *SSHConfig // nil for local nodes
-	GroupID uint64
-	DataDir string
-	WalDir  string
+	ID          uint64
+	RpcAddress  string     // RPC Address
+	RaftAddress string     // Raft Address
+	SSH         *SSHConfig // nil for local nodes
+	GroupID     uint64
+	DataDir     string
+	WalDir      string
 }
 
 func main() {
@@ -44,7 +45,8 @@ func main() {
 	if err != nil {
 		log.Fatalf("failed to open log file: %v", err)
 	}
-	log.SetOutput(io.MultiWriter(os.Stdout, logFile))
+	log.SetOutput(logFile)
+	log.SetFlags(log.Ltime | log.Lshortfile)
 
 	// Load configuration
 	config := schema.Config{}
@@ -73,33 +75,35 @@ func main() {
 	}
 
 	// Initialize Dragonboat Nodes
-	launcher := NewLauncher()
+	controllerAddress := "localhost:60082"
+	launcher := NewLauncher(controllerAddress)
 
 	for _, group := range config.RaftGroups {
 		groupMembers := make(map[uint64]string)
 		for _, nodeInfo := range group.Members {
-			groupMembers[nodeInfo.ID] = nodeInfo.Address
+			groupMembers[nodeInfo.ID] = nodeInfo.RaftAddress
 		}
 		keyRanges := metadata.GetShardKeyRanges(group.ShardID)
 
 		for _, nodeInfo := range group.Members {
 			var ssh *SSHConfig
-			if IsLocalAddress(nodeInfo.Address) {
+			if IsLocalAddress(nodeInfo.RpcAddress) {
 				ssh = nil
 			} else {
 				ssh = &SSHConfig{
-					Host:    nodeInfo.Address,
+					Host:    nodeInfo.RpcAddress,
 					User:    nodeInfo.User,
 					KeyPath: nodeInfo.SSHKeyPath,
 				}
 			}
 			spec := NodeSpec{
-				ID:      nodeInfo.ID,
-				Address: nodeInfo.Address,
-				SSH:     ssh,
-				GroupID: group.ShardID,
-				DataDir: fmt.Sprintf("tmp/data/node%d", nodeInfo.ID),
-				WalDir:  fmt.Sprintf("tmp/wal/node%d", nodeInfo.ID),
+				ID:          nodeInfo.ID,
+				RpcAddress:  nodeInfo.RpcAddress,
+				RaftAddress: nodeInfo.RaftAddress,
+				SSH:         ssh,
+				GroupID:     group.ShardID,
+				DataDir:     fmt.Sprintf("tmp/data/node%d", nodeInfo.ID),
+				WalDir:      fmt.Sprintf("tmp/wal/node%d", nodeInfo.ID),
 			}
 
 			if err := launcher.Launch(spec, groupMembers, keyRanges); err != nil {
@@ -107,6 +111,9 @@ func main() {
 			}
 		}
 	}
+	log.Println("All nodes have been launched. Waiting for Raft to stabilize...")
+	time.Sleep(schema.NODE_LAUNCH_TIMEOUT)
+	metadata.UpdateKeyRangeFromNode()
 
 	// Initialize Shard Controller and gRPC server
 	controller := controller.NewController(metadata)
@@ -115,7 +122,6 @@ func main() {
 	pb.RegisterControllerServer(controllerGrpcServer, controller)
 	reflection.Register(controllerGrpcServer)
 
-	controllerAddress := "localhost:60082"
 	lis, err := net.Listen("tcp", controllerAddress)
 	if err != nil {
 		log.Fatalf("failed to listen on port %s: %v", controllerAddress, err)
@@ -136,7 +142,7 @@ func main() {
 	}
 
 	// Initialize Request Router and HTTP server
-	router := router.NewRouter(controller, metadata)
+	router := router.NewRouter(metadata)
 
 	go func() {
 		http.HandleFunc("/", router.HandleRequest)
@@ -172,7 +178,6 @@ func main() {
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
-	// Log that AdaptoDB is running
 	log.Println("AdaptoDB is running and awaiting requests...")
 
 	// Wait for termination signal

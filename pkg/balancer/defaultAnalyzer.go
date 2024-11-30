@@ -59,13 +59,13 @@ func (a *DefaultAnalyzer) detectImbalanceShards(loads []*NodeMetrics) ([]uint64,
 	var imbalancedShards []uint64
 	avgEntries := 0.0
 	for _, load := range loads {
-		avgEntries += float64(load.NumEntries)	
+		avgEntries += float64(load.NumEntries)
 	}
 	avgEntries /= float64(len(loads))
-	
+
 	// If a shard is responsible for more than twice the average number of entries, it is considered imbalanced
 	for idx, load := range loads {
-		if float64(load.NumEntries) > avgEntries * 2 {
+		if float64(load.NumEntries) > avgEntries*2 {
 			imbalancedShards = append(imbalancedShards, uint64(idx))
 		}
 	}
@@ -92,30 +92,30 @@ func queryNodeStats(nodeAddress string) (*NodeMetrics, error) {
 	}
 
 	return &NodeMetrics{
-		NumEntries: resp.Entries,
+		NumEntries:           resp.Entries,
 		NumSuccessfulRequets: resp.SuccessfulRequests,
-		NumFailedRequests: resp.FailedRequests,
-		LastResetTime: resp.LastResetTime.AsTime(),
+		NumFailedRequests:    resp.FailedRequests,
+		LastResetTime:        resp.LastResetTime.AsTime(),
 	}, nil
 }
 
 func (a *DefaultAnalyzer) collectMetrics() ([]*NodeMetrics, error) {
-	// Use gRPC to collect metrics from each shard	
+	// Use gRPC to collect metrics from each shard
 	var ret []*NodeMetrics
 	for _, shard := range a.metadata.Config.RaftGroups {
 		// Try to query all members of the shard
 		for _, member := range shard.Members {
-			statsAddr := fmt.Sprintf("%s:%d", strings.Split(member.Address, ":")[0], 53000+member.ID)
+			statsAddr := fmt.Sprintf("%s:%d", strings.Split(member.RpcAddress, ":")[0], 53000+member.ID)
 			log.Printf("Querying node stats for %s", statsAddr)
 			res, err := queryNodeStats(statsAddr)
 			if err != nil {
 				log.Printf("Failed to query node stats: %v", err)
 				ret = append(ret, &NodeMetrics{
-					ShardID: shard.ShardID,
-					NodeID: member.ID,
-					NumEntries: -1,
+					ShardID:              shard.ShardID,
+					NodeID:               member.ID,
+					NumEntries:           -1,
 					NumSuccessfulRequets: -1,
-					NumFailedRequests: -1,
+					NumFailedRequests:    -1,
 				})
 			} else {
 				log.Printf("Node %d in Shard %d has %d entries:", member.ID, shard.ShardID, res.NumEntries)

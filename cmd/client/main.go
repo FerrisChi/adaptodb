@@ -12,7 +12,6 @@ import (
 	"net/http"
 	"os"
 	"strings"
-	"time"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -63,7 +62,7 @@ func getShardMapping() map[uint64]Shard {
 	defer conn.Close()
 
 	client := pb.NewShardRouterClient(conn)
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), schema.READ_WRITE_TIMEOUT)
 	defer cancel()
 
 	resp, err := client.GetConfig(ctx, &pb.GetConfigRequest{})
@@ -87,8 +86,7 @@ func getShardMapping() map[uint64]Shard {
 		}
 		for _, member := range members.GetMembers() {
 			shard.memberIds = append(shard.memberIds, member.GetId())
-			nodeServerAddr := fmt.Sprintf("%s:%d", strings.Split(member.GetAddr(), ":")[0], 51000+member.GetId())
-			shard.memberAddrs = append(shard.memberAddrs, nodeServerAddr)
+			shard.memberAddrs = append(shard.memberAddrs, member.GetAddr())
 		}
 		shards[shardId] = shard
 	}
@@ -107,7 +105,7 @@ func read(key string) (string, error) {
 		conn, err = grpc.NewClient(shards[shardId].memberAddrs[idx], grpc.WithTransportCredentials(insecure.NewCredentials()))
 	}
 	defer conn.Close()
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), schema.READ_WRITE_TIMEOUT)
 	defer cancel()
 	client := pb.NewNodeRouterClient(conn)
 	resp, err := client.Read(ctx, &pb.ReadRequest{ClusterID: shardId, Key: key})
@@ -129,7 +127,7 @@ func write(key, value string) (uint64, error) {
 		conn, err = grpc.NewClient(shards[shardId].memberAddrs[idx], grpc.WithTransportCredentials(insecure.NewCredentials()))
 	}
 	client := pb.NewNodeRouterClient(conn)
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), schema.READ_WRITE_TIMEOUT)
 	defer cancel()
 	resp, err := client.Write(ctx, &pb.WriteRequest{ClusterID: shardId, Key: key, Value: value})
 	if err != nil {
@@ -180,6 +178,7 @@ func process(parts []string) error {
 func main() {
 	// get the shard mapping
 	shards = getShardMapping()
+	fmt.Println(shards)
 
 	reader := bufio.NewReader(os.Stdin) // Create a buffered reader
 	fmt.Print("Enter command (e.g., 'r key' or 'w key value'):\n")
