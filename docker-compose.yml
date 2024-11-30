@@ -1,0 +1,15 @@
+version: '3.8'
+
+services:
+  controller:
+    build:
+      context: .
+      dockerfile: Dockerfile.controller
+    networks:
+      - adaptodb-net
+    ports:
+      - "50000:50000"
+
+networks:
+  adaptodb-net:
+    driver: bridge
