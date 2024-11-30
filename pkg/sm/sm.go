@@ -5,13 +5,13 @@ import (
 	"encoding/gob"
 	"errors"
 	"io"
-	"strconv"
 
 	"github.com/lni/dragonboat/v3/statemachine"
 )
 
 type KVStore struct {
 	Data map[string]string `yaml:"data" json:"data"` // The key-value data store
+	NumEntries int64 `yaml:"num_entries" json:"num_entries"`
 }
 
 type LookupResult struct {
@@ -36,7 +36,7 @@ func (s *KVStore) Lookup(query interface{}) (interface{}, error) {
 	if !exists {
 		return LookupResult{Value: "", NumEntries: int64(len(s.Data))}, errors.New("key not found")
 	}
-	return LookupResult{Value: value, NumEntries: int64(len(s.Data))}, nil
+	return LookupResult{Value: value, NumEntries: s.NumEntries}, nil
 }
 
 // Update applies a mutation to the state machine. This handles write requests.
@@ -63,6 +63,7 @@ func (s *KVStore) Update(data []byte) (statemachine.Result, error) {
 			if !ok {
 				// increment counter if key is not found
 				succ++
+				s.NumEntries++
 			}
 			s.Data[key] = value
 			succ++
@@ -72,8 +73,6 @@ func (s *KVStore) Update(data []byte) (statemachine.Result, error) {
 		}
 	}
 
-	var b []byte
-	strconv.AppendInt(b, int64(len(s.Data)), 10)
 	return statemachine.Result{Value: uint64(succ)}, nil
 }
 
