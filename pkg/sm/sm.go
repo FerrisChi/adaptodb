@@ -64,6 +64,11 @@ func (s *KVStore) Lookup(query interface{}) (interface{}, error) {
 				return LookupResult{Value: value.(string), NumEntries: s.NumEntries}, nil
 			}
 		}
+		for _, kr := range s.migrate_krs {
+			if key >= kr.Start && key < kr.End {
+				return LookupResult{Value: "", NumEntries: s.NumEntries}, errors.New("key in migration")
+			}
+		}
 		return LookupResult{Value: "", NumEntries: s.NumEntries}, errors.New("key not managed by this node")
 	case "schedule":
 		return s.krs, nil
@@ -126,6 +131,8 @@ func (s *KVStore) Update(data []byte) (statemachine.Result, error) {
 		krs := schema.ParseKeyRanges(kv[4])
 		s.migrationTaskId = taskId
 		s.migrate_krs = krs
+		// remove key ranges from local group
+		s.krs = schema.RemoveKeyRanges(s.krs, krs)
 
 		if s.nodeId != leaderId {
 			return statemachine.Result{}, nil
