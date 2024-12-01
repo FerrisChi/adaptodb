@@ -170,7 +170,10 @@ func (sc *Controller) CancelMigrationFromNode(ctx context.Context, req *pb.Cance
 	if op == nil {
 		log.Panicln("Migration not found")
 	}
-	op.cancelMigration()
+	err := op.cancelMigration()
+	if err != nil {
+		return nil, err
+	}
 
 	return &pb.CancelMigrationResponse{
 		Status: "OK",

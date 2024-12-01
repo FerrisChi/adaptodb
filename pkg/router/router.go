@@ -50,14 +50,12 @@ func (r *Router) HandleConfigRequest(w http.ResponseWriter, q *http.Request) {
 		return
 	}
 	// return the mapping: uint64 -> []schema.KeyRange
-	log.Printf("Returning shard mapping")
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(mapping)
 }
 
 // gRPC handler
 func (r *Router) GetShard(ctx context.Context, req *pb.GetShardRequest) (*pb.GetShardResponse, error) {
-	log.Printf("Received request from GRPC")
 	key := req.Key
 
 	// find the corresponding shard for the key
@@ -71,13 +69,11 @@ func (r *Router) GetShard(ctx context.Context, req *pb.GetShardRequest) (*pb.Get
 }
 
 func (r *Router) GetConfig(ctx context.Context, req *pb.GetConfigRequest) (*pb.GetConfigResponse, error) {
-	log.Printf("Received request from GRPC")
 	mapping, error := r.metadata.GetAllShardKeyRanges()
 	if error != nil {
 		return nil, status.Errorf(codes.Internal, "Failed to get shard mapping")
 	}
 	// convert the mapping to the proto format
-	log.Printf("Returning shard mapping")
 	result := make(map[uint64]*pb.KeyRangeList)
 	for k, v := range mapping {
 		ranges := make([]*pb.KeyRange, 0, len(v))

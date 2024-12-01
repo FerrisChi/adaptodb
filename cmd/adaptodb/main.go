@@ -182,7 +182,7 @@ func main() {
 
 	// Wait for termination signal
 	<-sigChan
-	log.Println("Shutdown signal received. Shutting down AdaptoDB...")
+	fmt.Println("Shutdown signal received. Shutting down AdaptoDB...")
 
 	// Close all processes and sessions
 	for _, process := range launcher.localProcesses {
@@ -198,5 +198,5 @@ func main() {
 	controllerGrpcServer.GracefulStop()
 	routerGrpcServer.GracefulStop()
 
-	log.Println("AdaptoDB has shut down gracefully.")
+	fmt.Println("AdaptoDB has shut down gracefully.")
 }
