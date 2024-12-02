@@ -2,11 +2,10 @@ package balancer
 
 import (
 	pb "adaptodb/pkg/proto/proto"
-	"context"
-	"log"
-	"time"
-
 	"adaptodb/pkg/schema"
+	"adaptodb/pkg/utils"
+	"context"
+	"time"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -26,12 +25,12 @@ import (
 // recover it. For now, we don't collect CPU and memory metrics because all
 // nodes are running locally.
 type NodeMetrics struct {
-	ShardID uint64
-	NodeID uint64
-	NumEntries int64
+	ShardID              uint64
+	NodeID               uint64
+	NumEntries           int64
 	NumSuccessfulRequets int64
-	NumFailedRequests int64
-	LastResetTime time.Time
+	NumFailedRequests    int64
+	LastResetTime        time.Time
 	// CPU     float64
 	// Memory  float64
 	// QPS     int64
@@ -77,6 +76,7 @@ func (b *Balancer) StartMonitoring() {
 }
 
 func (c *Balancer) sendShardUpdate(newSchedule []schema.Schedule) {
+	logger := utils.NamedLogger("Balancer")
 	protoSchedule := make([]*pb.Schedule, 0, len(newSchedule))
 	for _, shard := range newSchedule {
 		schedule := &pb.Schedule{
@@ -95,11 +95,12 @@ func (c *Balancer) sendShardUpdate(newSchedule []schema.Schedule) {
 
 	go func() {
 		resp, err := c.client.UpdateSchedule(context.Background(), req)
+		logger("Sending update schedule request: %v\n", req)
 		if err != nil {
-			log.Printf("Error sending shard update: %v", err)
+			logger("Error sending shard update: %v", err)
 			return
 		}
-		log.Printf("Shard update response: %s", resp.Message)
+		logger("Shard update response: %s", resp.Message)
 	}()
 }
 

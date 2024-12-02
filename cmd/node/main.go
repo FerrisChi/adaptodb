@@ -2,6 +2,9 @@
 package main
 
 import (
+	"adaptodb/pkg/schema"
+	"adaptodb/pkg/sm"
+	"adaptodb/pkg/utils"
 	"errors"
 	"flag"
 	"fmt"
@@ -16,16 +19,12 @@ import (
 	"syscall"
 
 	pb "adaptodb/pkg/proto/proto"
-	"adaptodb/pkg/schema"
-	"adaptodb/pkg/sm"
 
 	"github.com/lni/dragonboat/v3"
 	"github.com/lni/dragonboat/v3/config"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
 )
-
-
 
 func parseMembers(m string) (map[uint64]string, error) {
 	membersMap := make(map[uint64]string)
@@ -63,6 +62,8 @@ func parseKeyRange(kr string) []schema.KeyRange {
 }
 
 func main() {
+	logger := utils.NamedLogger("Main")
+
 	nodeID := flag.Uint64("id", 0, "NodeID to start")
 	address := flag.String("address", "", "Node address (e.g. localhost:63001)")
 	groupID := flag.Uint64("group-id", 0, "Raft group ID")
@@ -127,15 +128,16 @@ func main() {
 		log.Fatalf("failed to start node: %v", err)
 	}
 
-	log.Println("Started node with the following configuration:")
-	log.Printf("NodeID: %d", *nodeID)
-	log.Printf("Address: %s", *address)
-	log.Printf("GroupID: %d", *groupID)
-	log.Printf("DataDir: %s", *dataDir)
-	log.Printf("WALDir: %s", *walDir)
-	log.Printf("Members: %s", *members)
-	log.Printf("KeyRange: %s", *keyrange)
-	
+	logger("Started node with the following configuration:")
+
+	logger("NodeID: %d", *nodeID)
+	logger("Address: %s", *address)
+	logger("GroupID: %d", *groupID)
+	logger("DataDir: %s", *dataDir)
+	logger("WALDir: %s", *walDir)
+	logger("Members: %s", *members)
+	logger("KeyRange: %s", *keyrange)
+
 	// Initialize NodeStatsServer
 	statsServer := NewNodeStatsServer(nh, *groupID)
 
@@ -149,7 +151,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("failed to listen on port %s: %v", statsGrpcAddress, err)
 	}
-	log.Printf("Listening on %s", statsGrpcAddress)
+	logger("Listening on %s", statsGrpcAddress)
 
 	go func() {
 		if err := statsGrpcServer.Serve(lis); err != nil {
@@ -159,7 +161,7 @@ func main() {
 
 	// start grpc server for client communication
 	keyRanges := parseKeyRange(*keyrange)
-	log.Println("KeyRanges:", keyRanges)
+	logger("KeyRanges:", keyRanges)
 	router := NewRouter(nh, *groupID, keyRanges, statsServer)
 	nodeGrpcServer := grpc.NewServer()
 	pb.RegisterNodeRouterServer(nodeGrpcServer, router)
@@ -170,7 +172,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("failed to listen on port %s: %v", nodeGrpcAddress, err)
 	}
-	log.Printf("Listening on %s", nodeGrpcAddress)
+	logger("Listening on %s", nodeGrpcAddress)
 
 	go func() {
 		if err := nodeGrpcServer.Serve(lis); err != nil {
@@ -185,5 +187,5 @@ func main() {
 	nh.Stop()
 	nodeGrpcServer.Stop()
 	statsGrpcServer.Stop()
-	log.Println("Node stopped")
+	logger("Node stopped")
 }
