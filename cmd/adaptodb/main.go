@@ -31,7 +31,7 @@ type SSHConfig struct {
 }
 type NodeSpec struct {
 	ID          uint64
-	RpcAddress  string     // RPC Address
+	GrpcAddress string     // RPC Address
 	RaftAddress string     // Raft Address
 	SSH         *SSHConfig // nil for local nodes
 	GroupID     uint64
@@ -87,18 +87,18 @@ func main() {
 
 		for _, nodeInfo := range group.Members {
 			var ssh *SSHConfig
-			if IsLocalAddress(nodeInfo.RpcAddress) {
+			if IsLocalAddress(nodeInfo.GrpcAddress) {
 				ssh = nil
 			} else {
 				ssh = &SSHConfig{
-					Host:    nodeInfo.RpcAddress,
+					Host:    nodeInfo.GrpcAddress,
 					User:    nodeInfo.User,
 					KeyPath: nodeInfo.SSHKeyPath,
 				}
 			}
 			spec := NodeSpec{
 				ID:          nodeInfo.ID,
-				RpcAddress:  nodeInfo.RpcAddress,
+				GrpcAddress: nodeInfo.GrpcAddress,
 				RaftAddress: nodeInfo.RaftAddress,
 				SSH:         ssh,
 				GroupID:     group.ShardID,

@@ -173,6 +173,8 @@ func main() {
 
 	// Setup WebSocket handler
 	http.HandleFunc("/transfer", router.HandleTransfer)
+	http.HandleFunc("/read", router.HandleRead)
+	http.HandleFunc("/write", router.HandleWrite)
 
 	// Start HTTP server in goroutine
 	go func() {

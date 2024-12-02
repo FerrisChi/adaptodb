@@ -13,7 +13,8 @@ type RaftGroup struct {
 
 type NodeInfo struct {
 	ID          uint64 `yaml:"id"`                   // Required
-	RpcAddress  string `yaml:"address"`              // Required
+	HttpAddress string `yaml:"httpAddress"`          // Required
+	GrpcAddress string `yaml:"grpcAddress"`          // Required
 	RaftAddress string `yaml:"raftAddress"`          // Required
 	User        string `yaml:"user,omitempty"`       // Optional, for remote nodes
 	SSHKeyPath  string `yaml:"sshKeyPath,omitempty"` // Optional, for remote nodes
@@ -34,6 +35,11 @@ type BalanceAdvice struct {
 type Schedule struct {
 	ShardID   uint64
 	KeyRanges []KeyRange
+}
+
+type ConfigResponse struct {
+	ShardMap map[uint64][]KeyRange
+	Members  map[uint64][]NodeInfo
 }
 
 func KeyRangeToString(keyRanges []KeyRange) string {

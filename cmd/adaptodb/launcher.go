@@ -54,7 +54,7 @@ func IsLocalAddress(addr string) bool {
 }
 
 func (l *Launcher) Launch(spec NodeSpec, members map[uint64]string, keyRanges []schema.KeyRange) error {
-	if IsLocalAddress(spec.RpcAddress) {
+	if IsLocalAddress(spec.GrpcAddress) {
 		return l.launchLocal(spec, members, keyRanges)
 	}
 	return l.launchRemote(spec, members, keyRanges)

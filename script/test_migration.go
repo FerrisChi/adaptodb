@@ -70,11 +70,11 @@ func test() error {
 
 	// Step 4: Read a key 'hello' from shard 1, expect the value 'hello-dragonboat'
 	resp, err := client.Read(context.Background(), &pb.ReadRequest{ClusterID: 1, Key: "hello"})
-	if err != nil || resp.Value != "hello-dragonboat" {
+	if err != nil || resp.GetData() != "hello-dragonboat" {
 		log.Fatalf("Failed to read key 'hello' from shard 1: %v", err)
 	}
 	resp, err = client.Read(context.Background(), &pb.ReadRequest{ClusterID: 1, Key: "hi"})
-	if err != nil || resp.Value != "hi-dragonboat" {
+	if err != nil || resp.GetData() != "hi-dragonboat" {
 		log.Fatalf("Failed to read key 'hi' from shard 1: %v", err)
 	}
 	fmt.Print("Step 4 passed\n")
@@ -124,11 +124,11 @@ func test() error {
 	client2 := pb.NewNodeRouterClient(conn2)
 
 	resp, err = client2.Read(context.Background(), &pb.ReadRequest{ClusterID: 2, Key: "hello"})
-	if err != nil || resp.Value != "hello-dragonboat" {
+	if err != nil || resp.GetData() != "hello-dragonboat" {
 		log.Fatalf("Failed to read key 'hello' from shard 2: %v", err)
 	}
 	resp, err = client2.Read(context.Background(), &pb.ReadRequest{ClusterID: 2, Key: "hi"})
-	if err != nil || resp.Value != "hi-dragonboat" {
+	if err != nil || resp.GetData() != "hi-dragonboat" {
 		log.Fatalf("Failed to read key 'hi' from shard 2: %v", err)
 	}
 	fmt.Print("Step 7 passed\n")
@@ -156,11 +156,11 @@ func test() error {
 
 	// Step 10: Read a key 'hello' from shard 2, expect the value 'hello-dragonboat'
 	resp, err = client2.Read(context.Background(), &pb.ReadRequest{ClusterID: 2, Key: "hello"})
-	if err != nil || resp.Value != "hello-dragonboat" {
+	if err != nil || resp.GetData() != "hello-dragonboat" {
 		log.Fatalf("Failed to read key 'hello' from shard 2 after restart: %v", err)
 	}
 	resp, err = client2.Read(context.Background(), &pb.ReadRequest{ClusterID: 2, Key: "hi"})
-	if err != nil || resp.Value != "hi-dragonboat" {
+	if err != nil || resp.GetData() != "hi-dragonboat" {
 		log.Fatalf("Failed to read key 'hi' from shard 2 after restart: %v", err)
 	}
 	fmt.Print("Step 10 passed\n")

@@ -183,7 +183,7 @@ func (ms *Metadata) UpdateKeyRangeFromNode() {
 	for i := range ms.Config.RaftGroups {
 		shard := &ms.Config.RaftGroups[i]
 		for _, node := range shard.Members {
-			conn, err := grpc.NewClient(node.RpcAddress, grpc.WithTransportCredentials(insecure.NewCredentials()))
+			conn, err := grpc.NewClient(node.GrpcAddress, grpc.WithTransportCredentials(insecure.NewCredentials()))
 			if err != nil {
 				log.Printf("failed to connect to node %d: %v", node.ID, err)
 				continue

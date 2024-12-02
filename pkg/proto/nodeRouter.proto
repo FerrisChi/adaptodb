@@ -9,8 +9,9 @@ import "controller.proto";
 
 service NodeRouter {
   rpc GetKeyRanges (GetKeyRangesRequest) returns (GetKeyRangesResponse) {};
-  rpc Read (ReadRequest) returns (ReadResponse) {};
-  rpc Write (WriteRequest) returns (WriteResponse) {};
+  rpc Read (ReadRequest) returns (RWResponse) {};
+  rpc Write (WriteRequest) returns (RWResponse) {};
+  rpc Remove (RemoveRequest) returns (RWResponse) {};
   rpc StartMigration (MigrateRequest) returns (MigrateResponse) {};
   rpc Transfer (TransferRequest) returns (TransferResponse) {};
   rpc CancelMigration (CancelMigrationRequest) returns (CancelMigrationResponse) {};
@@ -22,29 +23,20 @@ message ReadRequest {
   string key = 2;
 }
 
-message ReadResponse {
-  string value = 1;
-}
-
 message WriteRequest {
   uint64 clusterID = 1;
   string key = 2;
   string value = 3;
 }
 
-message WriteResponse {
+message RWResponse {
   uint64 status = 1;
-  bytes data = 2;
+  string data = 2;
 }
 
 message RemoveRequest {
   uint64 clusterID = 1;
   string key = 2;
-}
-
-message RemoveResponse {
-  uint64 status = 1;
-  bytes data = 2;
 }
 
 message MigrateRequest {

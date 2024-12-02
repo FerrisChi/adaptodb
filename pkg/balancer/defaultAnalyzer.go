@@ -105,7 +105,7 @@ func (a *DefaultAnalyzer) collectMetrics() ([]*NodeMetrics, error) {
 	for _, shard := range a.metadata.Config.RaftGroups {
 		// Try to query all members of the shard
 		for _, member := range shard.Members {
-			statsAddr := fmt.Sprintf("%s:%d", strings.Split(member.RpcAddress, ":")[0], 53000+member.ID)
+			statsAddr := fmt.Sprintf("%s:%d", strings.Split(member.GrpcAddress, ":")[0], 53000+member.ID)
 			log.Printf("Querying node stats for %s", statsAddr)
 			res, err := queryNodeStats(statsAddr)
 			if err != nil {

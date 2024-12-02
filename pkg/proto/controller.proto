@@ -34,8 +34,7 @@ message UpdateScheduleResponse {
 }
 
 message CancelMigrationRequest {
-  uint64 fromClusterID = 1;
-  uint64 toClusterID = 2;
+  uint64 taskId = 1;
 }
 
 message CancelMigrationResponse {

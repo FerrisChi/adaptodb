@@ -113,7 +113,7 @@ func read(key string) (string, error) {
 		return "", err
 	}
 
-	return resp.GetValue(), nil
+	return string(resp.GetData()), nil
 }
 
 // sync write
