@@ -1,5 +1,5 @@
 # Use a specific Alpine version
-FROM golang:1.22.2-alpine
+FROM golang:1.22.7-alpine
 
 # Configure Alpine repositories and install dependencies
 # RUN echo "https://dl-cdn.alpinelinux.org/alpine/v3.19/main" > /etc/apk/repositories
@@ -17,11 +17,9 @@ ENV PATH="$PATH:$(go env GOPATH)/bin"
 WORKDIR /app
 COPY . .
 
-RUN make debug
+RUN make debug release
 
 # RUN make release # for release build
 
-EXPOSE 51000-53000
+EXPOSE 51000-54000
 EXPOSE 63000-65000
-
-ENTRYPOINT ["./bin/debug/node"]

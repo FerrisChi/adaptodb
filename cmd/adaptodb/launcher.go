@@ -2,12 +2,19 @@ package main
 
 import (
 	"adaptodb/pkg/schema"
+	"context"
 	"fmt"
+	"log"
 	"os"
 	"os/exec"
 	"strconv"
 	"strings"
 
+	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/api/types/network"
+	"github.com/docker/docker/client"
+	"github.com/docker/docker/errdefs"
+	"github.com/docker/go-connections/nat"
 	"golang.org/x/crypto/ssh"
 )
 
@@ -65,12 +72,23 @@ func (l *Launcher) Launch(spec NodeSpec, members map[uint64]string, keyRanges []
 
 func (l *Launcher) setupNetwork() error {
 	// Create docker network
-	cmd := exec.Command("docker", "network", "create", l.networkName)
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("failed to create docker network: %v", err)
-	}
+	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
+    if err != nil {
+        return fmt.Errorf("failed to create Docker client: %v", err)
+    }
 
-	return nil
+	_, err = cli.NetworkCreate(context.Background(), l.networkName, network.CreateOptions{
+		Driver: "bridge",
+	})
+    if err != nil {
+		if errdefs.IsConflict(err) {
+            // Ignore the error if the network already exists
+            return nil
+        }
+        return fmt.Errorf("failed to create Docker network: %v", err)
+    }
+
+    return nil
 }
 
 func (l *Launcher) launchLocal(spec NodeSpec, members map[uint64]string, keyRanges []schema.KeyRange) error {
@@ -85,26 +103,101 @@ func (l *Launcher) launchLocal(spec NodeSpec, members map[uint64]string, keyRang
 	_debugPort := port + 100
 	fmt.Println("debug port: ", _debugPort)
 
+    cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
+    if err != nil {
+		return fmt.Errorf("failed to create Docker client: %v", err)
+    }
+	defer cli.Close()
+
+    // Define the command and arguments to pass to the container
+    cmd := []string{
+		// "./bin/release/node",  // use this in production
+		"./bin/debug/node",    // use this in development
+        "--id", fmt.Sprintf("%d", spec.ID),
+        "--group-id", fmt.Sprintf("%d", spec.GroupID),
+        "--address", spec.RaftAddress,
+        "--data-dir", spec.DataDir,
+        "--wal-dir", spec.WalDir,
+        "--members", formatMembers(members),
+        "--keyrange", schema.KeyRangeToString(keyRanges),
+        "--ctrl-address", l.ctrlAddress,
+    }
+
+	// Define log configuration to redirect stdout and stderr to a file
+	logConfig := container.LogConfig{
+		Type: "json-file",
+		Config: map[string]string{
+			"max-size": "10m",
+			"max-file": "3",
+		},
+	}
+
+	// Define port bindings
+    portBindings := nat.PortMap{
+		// nat.Port(fmt.Sprintf("%d/tcp", port)): []nat.PortBinding{{HostPort: fmt.Sprintf("%d", port)}},
+        nat.Port(fmt.Sprintf("%d/tcp", _debugPort)): []nat.PortBinding{{HostPort: fmt.Sprintf("%d", _debugPort)}},
+        nat.Port(fmt.Sprintf("%d/tcp", 51000+spec.ID)): []nat.PortBinding{{HostPort: fmt.Sprintf("%d", 51000+spec.ID)}},
+        nat.Port(fmt.Sprintf("%d/tcp", 52000+spec.ID)): []nat.PortBinding{{HostPort: fmt.Sprintf("%d", 52000+spec.ID)}},
+        nat.Port(fmt.Sprintf("%d/tcp", 53000+spec.ID)): []nat.PortBinding{{HostPort: fmt.Sprintf("%d", 53000+spec.ID)}},
+    }
+
+	log.Printf("Port bindings: %v", portBindings)
+	
+	// Read current hostname from `/etc/hostname`
+	// This is needed to set the hostname of the container because
+	// for some magical reason, dragonboat expects the container's hostname
+	// to be the same as the host's hostname
+	hostname, err := os.ReadFile("/etc/hostname")
+	if err != nil {
+		return fmt.Errorf("failed to read hostname: %v", err)
+	}
+
+    // Run the existing container with the specified arguments
+    resp, err := cli.ContainerCreate(context.Background(), &container.Config{
+        Image: "adaptodb-node", // Replace with your Docker image
+        Cmd:   cmd,
+		Hostname: string(hostname),
+    }, &container.HostConfig{
+        NetworkMode: container.NetworkMode(l.networkName),
+		PortBindings: portBindings,
+		LogConfig: logConfig,
+    }, &network.NetworkingConfig{
+		EndpointsConfig: map[string]*network.EndpointSettings{
+			l.networkName: {},
+		},
+	}, nil, fmt.Sprintf("node-%d", spec.ID))
+
+    if err != nil {
+        return fmt.Errorf("failed to create Docker container: %v", err)
+    }
+
+    // Start the container
+    if err := cli.ContainerStart(context.Background(), resp.ID, container.StartOptions{}); err != nil {
+        return fmt.Errorf("failed to start Docker container: %v", err)
+    }
+
+    return nil
 	
 	// Create docker container
-	cmd := exec.Command("docker", "run",
-		"-d",
-		"--name", fmt.Sprintf("node%d", spec.ID),
-		"--network", l.networkName,
-		"-p", fmt.Sprintf("%d:%d", _debugPort, _debugPort),
-		"-p", fmt.Sprintf("%d:%d", 51000+spec.ID, 51000+spec.ID),
-		"-p", fmt.Sprintf("%d:%d", 52000+spec.ID, 52000+spec.ID),
-		"-p", fmt.Sprintf("%d:%d", 53000+spec.ID, 53000+spec.ID),
-		"adaptodb-node",
-		"--id", fmt.Sprintf("%d", spec.ID),
-		"--group-id", fmt.Sprintf("%d", spec.GroupID),
-		"--address", spec.RaftAddress,
-		"--data-dir", spec.DataDir,
-		"--wal-dir", spec.WalDir,
-		"--members", formatMembers(members),
-		"--keyrange", schema.KeyRangeToString(keyRanges),
-		"--ctrl-address", l.ctrlAddress,
-	)
+	// cmd := exec.Command("docker", "run",
+	// 	"-d",
+	// 	"--name", fmt.Sprintf("node%d", spec.ID),
+	// 	"--network", l.networkName,
+	// 	"-p", fmt.Sprintf("%d:%d", _debugPort, _debugPort),
+	// 	"-p", fmt.Sprintf("%d:%d", 51000+spec.ID, 51000+spec.ID),
+	// 	"-p", fmt.Sprintf("%d:%d", 52000+spec.ID, 52000+spec.ID),
+	// 	"-p", fmt.Sprintf("%d:%d", 53000+spec.ID, 53000+spec.ID),
+	// 	"adaptodb-node",
+	// 	"--id", fmt.Sprintf("%d", spec.ID),
+	// 	"--group-id", fmt.Sprintf("%d", spec.GroupID),
+	// 	"--address", spec.RaftAddress,
+	// 	"--data-dir", spec.DataDir,
+	// 	"--wal-dir", spec.WalDir,
+	// 	"--members", formatMembers(members),
+	// 	"--keyrange", schema.KeyRangeToString(keyRanges),
+	// 	"--ctrl-address", l.ctrlAddress,
+	// )
+
 	// cmd := exec.Command("./bin/release/node", // use this in production
 	// 	// cmd := exec.Command("dlv", "exec", "./bin/debug/node", "--headless", fmt.Sprintf("--listen=:%d", debugPort), "--api-version=2", "--", // use this in development
 	// 	"--id", fmt.Sprintf("%d", spec.ID),
@@ -117,42 +210,72 @@ func (l *Launcher) launchLocal(spec NodeSpec, members map[uint64]string, keyRang
 	// 	"--ctrl-address", l.ctrlAddress,
 	// )
 
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+	// cmd.Stdout = os.Stdout
+	// cmd.Stderr = os.Stderr
 
-	if err := cmd.Start(); err != nil {
-		return fmt.Errorf("failed to start local node process: %v", err)
-	}
+	// if err := cmd.Start(); err != nil {
+	// 	return fmt.Errorf("failed to start local node process: %v", err)
+	// }
 
-	l.localProcesses[spec.ID] = cmd
-	return nil
+	// l.localProcesses[spec.ID] = cmd
+	// return nil
 }
 
 func (l *Launcher) dockerCleanup() error {
 	// Stop and remove all containers
-	cmd := exec.Command("docker", "ps", "-q", "-f", "name=node-*")
-    output, err := cmd.Output()
-    if err != nil {
-        return fmt.Errorf("failed to list containers: %v", err)
-    }
-
-	if len(output) > 0 {
-		cmd = exec.Command("docker", "stop", string(output))
-		if err := cmd.Run(); err != nil {
-			return fmt.Errorf("failed to stop docker containers: %v", err)
-		}
-		cmd = exec.Command("docker", "rm", string(output))
-		if err := cmd.Run(); err != nil {
-			return fmt.Errorf("failed to remove docker containers: %v", err)
-		}
+	ctx := context.Background()
+	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
+	if err != nil {
+		return fmt.Errorf("failed to create Docker client: %v", err)
 	}
+	defer cli.Close()
+
+	containers, err := cli.ContainerList(ctx, container.ListOptions{})
+	if err != nil {
+		return fmt.Errorf("failed to list Docker containers: %v", err)
+	}
+
+	for _, cntner := range containers {
+		fmt.Print("Stopping container ", cntner.ID[:10], "... ")
+		if err := cli.ContainerStop(ctx, cntner.ID, container.StopOptions{}); err != nil {
+			return fmt.Errorf("failed to stop Docker container: %v", err)
+		}
+		fmt.Println("Success")
+
+		fmt.Print("Removing container ", cntner.ID[:10], "... ")
+		if err := cli.ContainerRemove(ctx, cntner.ID, container.RemoveOptions{}); err != nil {
+			return fmt.Errorf("failed to remove Docker container: %v", err)
+		}
+		fmt.Println("Success")
+	}
+	// cmd := exec.Command("docker", "ps", "-q", "-f", "name=node-*")
+    // output, err := cmd.Output()
+    // if err != nil {
+    //     return fmt.Errorf("failed to list containers: %v", err)
+    // }
+
+	// if len(output) > 0 {
+	// 	cmd = exec.Command("docker", "stop", string(output))
+	// 	if err := cmd.Run(); err != nil {
+	// 		return fmt.Errorf("failed to stop docker containers: %v", err)
+	// 	}
+	// 	cmd = exec.Command("docker", "rm", string(output))
+	// 	if err := cmd.Run(); err != nil {
+	// 		return fmt.Errorf("failed to remove docker containers: %v", err)
+	// 	}
+	// }
 
 	// Remove docker network
-	cmd = exec.Command("docker", "network", "rm", l.networkName)
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("failed to remove docker network: %v", err)
-	}
-	return nil
+    err = cli.NetworkRemove(context.Background(), l.networkName)
+    if err != nil {
+		if errdefs.IsNotFound(err) {
+            // Ignore the error if the network does not exist
+            return nil
+        }
+        return fmt.Errorf("failed to remove Docker network: %v", err)
+    }
+
+    return nil
 }
 
 func (l *Launcher) launchRemote(spec NodeSpec, members map[uint64]string, keyRanges []schema.KeyRange) error {

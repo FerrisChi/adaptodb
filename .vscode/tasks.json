@@ -2,11 +2,11 @@
     "tasks": [
         {
             "type": "process",
-            "label": "Build and run adaptodb",
+            "label": "Build local and clean up ports",
             "command": "sh",
             "args": [
                 "-c",
-                "export PATH=\"$PATH:$(go env GOPATH)/bin\" && make build && ./bin/debug/adaptodb && ./kill-ports.sh"
+                "export PATH=\"$PATH:$(go env GOPATH)/bin\" && make debug release && ./kill-ports.sh"
             ],
             "options": {
                 "cwd": "${workspaceFolder}"
@@ -23,7 +23,7 @@
         },
         {
             "type": "process",
-            "label": "Build all and cleanup",
+            "label": "Build all and cleanup ports",
             "command": "sh",
             "args": [
                 "-c",

@@ -77,6 +77,7 @@ func main() {
 	// Initialize Dragonboat Nodes
 	controllerAddress := "localhost:60082"
 	launcher := NewLauncher(controllerAddress)
+	defer launcher.Stop()
 
 	for _, group := range config.RaftGroups {
 		groupMembers := make(map[uint64]string)
@@ -117,8 +118,10 @@ func main() {
 
 	// Initialize Shard Controller and gRPC server
 	controller := controller.NewController(metadata)
+	defer controller.Stop()
 
 	controllerGrpcServer := grpc.NewServer()
+	defer controllerGrpcServer.GracefulStop()
 	pb.RegisterControllerServer(controllerGrpcServer, controller)
 	reflection.Register(controllerGrpcServer)
 
@@ -140,6 +143,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("failed to initialize Balance Watcher: %v", err)
 	}
+	defer balancer.Stop()
 
 	// Initialize Request Router and HTTP server
 	router := router.NewRouter(metadata)
@@ -155,6 +159,7 @@ func main() {
 
 	// Initialize gRPC server
 	routerGrpcServer := grpc.NewServer()
+	defer routerGrpcServer.GracefulStop()
 	pb.RegisterShardRouterServer(routerGrpcServer, router)
 	reflection.Register(routerGrpcServer)
 
@@ -176,6 +181,7 @@ func main() {
 
 	// Setup signal handling for graceful shutdown
 	sigChan := make(chan os.Signal, 1)
+	defer close(sigChan)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
 	log.Println("AdaptoDB is running and awaiting requests...")
@@ -192,11 +198,6 @@ func main() {
 		session.Close()
 	}
 
-	// Shutdown sequence
-	controller.Stop()
-	balancer.Stop()
-	controllerGrpcServer.GracefulStop()
-	routerGrpcServer.GracefulStop()
-
+	// Shutdown (deferred) servers
 	log.Println("AdaptoDB has shut down gracefully.")
 }
