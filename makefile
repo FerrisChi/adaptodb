@@ -10,7 +10,7 @@ docker-clean:
 	docker rm -f $$(docker ps -aq -f name=node-*)
 	docker network rm adaptodb-net || true
 
-build: debug release
+build: debug release docker-build
 
 debug: proto
 	$(GO_DEBUG_CMD) -o ./bin/debug/adaptodb ./cmd/adaptodb

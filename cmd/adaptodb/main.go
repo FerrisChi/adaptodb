@@ -124,6 +124,7 @@ func initializeNodes(config schema.Config, metadataManager *metadata.Metadata, l
 ) *Launcher {
 	controllerAddress := "127.0.0.1:60082"
 	launcher := NewLauncher(controllerAddress)
+	defer launcher.Stop()
 
 	for _, group := range config.RaftGroups {
 		launchNodes(group, metadataManager, launcher, logger)
@@ -267,6 +268,7 @@ func waitForShutdown(logger struct {
 }, launcher *Launcher, controller *controller.Controller,
 ) {
 	sigChan := make(chan os.Signal, 1)
+	defer close(sigChan)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
 	logger.Logf("AdaptoDB is running and awaiting requests...")
