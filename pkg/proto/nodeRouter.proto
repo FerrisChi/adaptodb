@@ -5,9 +5,16 @@ syntax = "proto3";
 package proto;
 option go_package = "adaptodb/pkg/proto";
 
+import "controller.proto";
+
 service NodeRouter {
+  rpc GetKeyRanges (GetKeyRangesRequest) returns (GetKeyRangesResponse) {};
   rpc Read (ReadRequest) returns (ReadResponse) {};
   rpc Write (WriteRequest) returns (WriteResponse) {};
+  rpc StartMigration (MigrateRequest) returns (MigrateResponse) {};
+  rpc Transfer (TransferRequest) returns (TransferResponse) {};
+  rpc CancelMigration (CancelMigrationRequest) returns (CancelMigrationResponse) {};
+  rpc ApplyMigration (ApplyMigrationRequest) returns (ApplyMigrationResponse) {};
 }
 
 message ReadRequest {
@@ -28,4 +35,55 @@ message WriteRequest {
 message WriteResponse {
   uint64 status = 1;
   bytes data = 2;
+}
+
+message RemoveRequest {
+  uint64 clusterID = 1;
+  string key = 2;
+}
+
+message RemoveResponse {
+  uint64 status = 1;
+  bytes data = 2;
+}
+
+message MigrateRequest {
+  uint64 taskId = 1;
+  uint64 fromClusterId = 2;
+  uint64 toClusterId = 3;
+  string address = 4;
+  repeated KeyRange keyRanges = 5;
+}
+
+message MigrateResponse {
+  uint64 status = 1;
+  bytes data = 2;
+}
+
+message TransferRequest {
+  uint64 fromClusterID = 1;
+  uint64 toClusterID = 2;
+  repeated KeyRange keyRanges = 3;
+}
+
+message TransferResponse {
+  uint64 status = 1;
+  bytes data = 2;
+}
+
+message ApplyMigrationRequest {
+  uint64 taskId = 1;
+}
+
+message ApplyMigrationResponse {
+  uint64 status = 1;
+  bytes data = 2;
+}
+
+message GetKeyRangesRequest {
+  uint64 clusterID = 1;
+}
+
+message GetKeyRangesResponse {
+  KeyRangeList keyRanges = 1;
 }

@@ -26,12 +26,12 @@ import (
 // recover it. For now, we don't collect CPU and memory metrics because all
 // nodes are running locally.
 type NodeMetrics struct {
-	ShardID uint64
-	NodeID uint64
-	NumEntries int64
+	ShardID              uint64
+	NodeID               uint64
+	NumEntries           int64
 	NumSuccessfulRequets int64
-	NumFailedRequests int64
-	LastResetTime time.Time
+	NumFailedRequests    int64
+	LastResetTime        time.Time
 	// CPU     float64
 	// Memory  float64
 	// QPS     int64
@@ -61,7 +61,7 @@ func NewBalancer(address string, analyzer Analyzer) (*Balancer, error) {
 }
 
 func (b *Balancer) StartMonitoring() {
-	ticker := time.NewTicker(30 * time.Second)
+	ticker := time.NewTicker(30000 * time.Second)
 	defer ticker.Stop()
 
 	for {

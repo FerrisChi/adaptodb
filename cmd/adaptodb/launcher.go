@@ -36,12 +36,14 @@ func connectSSH(conf *SSHConfig) (*ssh.Client, error) {
 type Launcher struct {
 	localProcesses map[uint64]*exec.Cmd
 	sshSessions    map[uint64]*ssh.Client
+	ctrlAddress    string
 }
 
-func NewLauncher() *Launcher {
+func NewLauncher(ctrlAddress string) *Launcher {
 	return &Launcher{
 		localProcesses: make(map[uint64]*exec.Cmd),
 		sshSessions:    make(map[uint64]*ssh.Client),
+		ctrlAddress:    ctrlAddress,
 	}
 }
 
@@ -52,26 +54,27 @@ func IsLocalAddress(addr string) bool {
 }
 
 func (l *Launcher) Launch(spec NodeSpec, members map[uint64]string, keyRanges []schema.KeyRange) error {
-	if IsLocalAddress(spec.Address) {
+	if IsLocalAddress(spec.RpcAddress) {
 		return l.launchLocal(spec, members, keyRanges)
 	}
 	return l.launchRemote(spec, members, keyRanges)
 }
 
 func (l *Launcher) launchLocal(spec NodeSpec, members map[uint64]string, keyRanges []schema.KeyRange) error {
-	port, _ := strconv.Atoi(spec.Address[strings.LastIndex(spec.Address, ":")+1:])
+	port, _ := strconv.Atoi(spec.RaftAddress[strings.LastIndex(spec.RaftAddress, ":")+1:])
 	_debugPort := port + 100
 	fmt.Println("debug port: ", _debugPort)
-	
+
 	cmd := exec.Command("./bin/release/node", // use this in production
-	// cmd := exec.Command("dlv", "exec", "./bin/debug/node", "--headless", fmt.Sprintf("--listen=:%d", debugPort), "--api-version=2", "--", // use this in development
+		// cmd := exec.Command("dlv", "exec", "./bin/debug/node", "--headless", fmt.Sprintf("--listen=:%d", debugPort), "--api-version=2", "--", // use this in development
 		"--id", fmt.Sprintf("%d", spec.ID),
 		"--group-id", fmt.Sprintf("%d", spec.GroupID),
-		"--address", spec.Address,
+		"--address", spec.RaftAddress,
 		"--data-dir", spec.DataDir,
 		"--wal-dir", spec.WalDir,
 		"--members", formatMembers(members),
 		"--keyrange", schema.KeyRangeToString(keyRanges),
+		"--ctrl-address", l.ctrlAddress,
 	)
 
 	cmd.Stdout = os.Stdout
@@ -100,7 +103,7 @@ func (l *Launcher) launchRemote(spec NodeSpec, members map[uint64]string, keyRan
 	defer session.Close()
 
 	cmd := fmt.Sprintf("./node -id %d -addr %s -group %d -data-dir %s -wal-dir %s -members '%s'",
-		spec.ID, spec.Address, spec.GroupID, spec.DataDir, spec.WalDir, formatMembers(members))
+		spec.ID, spec.RaftAddress, spec.GroupID, spec.DataDir, spec.WalDir, formatMembers(members))
 
 	if err := session.Start(cmd); err != nil {
 		return fmt.Errorf("failed to start remote command: %v", err)

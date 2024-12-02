@@ -62,11 +62,13 @@ An Adaptive shard-balancing key-value database
 
 2. Write:
 
-**!!!!!!!!! key starts with [a-z] !!!!!!!!!**
+    **!!!!!!!!! key starts with [a-z], value only contains [a-zA-Z0-9] !!!!!!!!!**
 
-**!!!!!!!!! value only contains [a-zA-Z0-9] !!!!!!!!!**
+    `grpcurl -plaintext -d '{"clusterID": 1, "key": "hello", "value": "hello-dragonboat"}' localhost:51001 proto.NodeRouter/Write`
 
-`grpcurl -plaintext -d '{"clusterID": 1, "key": "hello", "value": "hello-dragonboat"}' localhost:51001 proto.NodeRouter/Write`
+#### Migrate
+
+`grpcurl -plaintext -d '{"schedule": [{"shardId": 2, "keyRanges": [{"start": "h", "end": "m"}]}]}' localhost:60082 proto.Controller/UpdateSchedule`
 
 #### Get the shard id for key (test only)
 
@@ -77,7 +79,8 @@ An Adaptive shard-balancing key-value database
 2. grpc
    
    Note: install grpcurl via `brew install grpcurl` if running for the first time
-`grpcurl -plaintext -d '{"key":"test-key"}' localhost:60081 proto.ShardRouter/GetShard`
+
+    `grpcurl -plaintext -d '{"key":"test-key"}' localhost:60081 proto.ShardRouter/GetShard`
 
 
 ## Code
@@ -121,3 +124,9 @@ makefile
 - When a program exited unexpectedly (e.g., as a result of `log.Fatalf()`), run `kill-ports.sh` to cleanup the remaining processes that are still running.
 
 - If a process was terminated abnormally, it might not release the lock to its data. In which case, you might need to `rm -r tmp/` to remove all stale data and restart the nodes.
+
+## Test
+
+### Run test script
+
+1. Test migration: `go run script/test_migration.go`
