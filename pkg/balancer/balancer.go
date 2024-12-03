@@ -2,11 +2,10 @@ package balancer
 
 import (
 	pb "adaptodb/pkg/proto/proto"
-	"context"
-	"log"
-	"time"
-
 	"adaptodb/pkg/schema"
+	"adaptodb/pkg/utils"
+	"context"
+	"time"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -61,7 +60,7 @@ func NewBalancer(address string, analyzer Analyzer) (*Balancer, error) {
 }
 
 func (b *Balancer) StartMonitoring() {
-	ticker := time.NewTicker(30000 * time.Second)
+	ticker := time.NewTicker(15 * time.Second)
 	defer ticker.Stop()
 
 	for {
@@ -77,6 +76,7 @@ func (b *Balancer) StartMonitoring() {
 }
 
 func (c *Balancer) sendShardUpdate(newSchedule []schema.Schedule) {
+	logger := utils.NamedLogger("Balancer")
 	protoSchedule := make([]*pb.Schedule, 0, len(newSchedule))
 	for _, shard := range newSchedule {
 		schedule := &pb.Schedule{
@@ -95,11 +95,12 @@ func (c *Balancer) sendShardUpdate(newSchedule []schema.Schedule) {
 
 	go func() {
 		resp, err := c.client.UpdateSchedule(context.Background(), req)
+		logger.Logf("Sending update schedule request: %v\n", req)
 		if err != nil {
-			log.Printf("Error sending shard update: %v", err)
+			logger.Logf("Error sending shard update: %v", err)
 			return
 		}
-		log.Printf("Shard update response: %s", resp.Message)
+		logger.Logf("Shard update response: %s", resp.Message)
 	}()
 }
 
