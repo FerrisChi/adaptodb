@@ -58,7 +58,6 @@ func main() {
 	startBalancer(controllerAddress, metadataManager, logger)
 
 	waitForShutdown(logger, launcher, controller)
-	// waitForShutdown(logger, nil, controller)
 }
 
 // setupLogger configures the logger
@@ -130,43 +129,6 @@ func initializeNodes(config schema.Config, metadataManager *metadata.Metadata, l
 		launchNodes(group, metadataManager, launcher, logger)
 	}
 	return launcher
-}
-
-// iniitalize docker container nodes
-func initializeDockerNodes(config schema.Config, metadataManager *metadata.Metadata, logger struct {
-	Logf   func(format string, v ...interface{})
-	Fatalf func(format string, v ...interface{})
-},
-) {
-	controllerAddress := "localhost:60082"
-
-	for _, group := range config.RaftGroups {
-		for _, nodeInfo := range group.Members {
-			nodePorts := map[string]string{
-				"60080": fmt.Sprintf("%d", 60080+nodeInfo.ID), // HTTP Port
-				"60081": fmt.Sprintf("%d", 60081+nodeInfo.ID), // gRPC Port
-			}
-
-			envVars := []string{
-				fmt.Sprintf("--id=%d", nodeInfo.ID),
-				fmt.Sprintf("--group-id=%d", group.ShardID),
-        fmt.Sprintf("--address=%s", nodeInfo.RaftAddress),
-        fmt.Sprintf("--data-dir=%s", ),
-        fmt.Sprintf("--members=%s")
-				fmt.Sprintf("DATA_DIR=/data/node%d", nodeInfo.ID),
-				fmt.Sprintf("WAL_DIR=/wal/node%d", nodeInfo.ID),
-				fmt.Sprintf("CONTROLER_ADDRESS=%s", controllerAddress),
-			}
-
-			containerName := fmt.Sprintf("adaptodb_node_%d", nodeInfo.ID)
-			containerID, err := utils.RunDockerContainer("adaptodb-node-image", containerName, nodePorts, envVars)
-			if err != nil {
-				logger.Fatalf("Failed to launch node %d in Docker: %v", nodeInfo.ID, err)
-			}
-
-			logger.Logf("Node %d launched in Docker (Container ID: %s)", nodeInfo.ID, containerID)
-		}
-	}
 }
 
 func launchNodes(group schema.RaftGroup, metadataManager *metadata.Metadata, launcher *Launcher, logger struct {
