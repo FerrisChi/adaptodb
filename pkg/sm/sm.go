@@ -148,7 +148,7 @@ func (s *KVStore) Update(data []byte) (statemachine.Result, error) {
 		s.krs = schema.RemoveKeyRanges(s.krs, krs)
 
 		if s.nodeId != leaderId {
-			return statemachine.Result{}, nil
+			return statemachine.Result{Value: 1, Data: []byte(fmt.Sprintf("Migration task %d started successfully on source node %d", taskId, leaderId))}, nil
 		}
 		// use a new go routine to transfer data to node in target address
 		go func(data *sync.Map) {
@@ -157,7 +157,7 @@ func (s *KVStore) Update(data []byte) (statemachine.Result, error) {
 				log.Println("Error transferring data:", err)
 			}
 		}(&s.Data)
-		return statemachine.Result{Value: 1, Data: []byte(fmt.Sprintf("Migration task %d started successfully on source.", taskId))}, nil
+		return statemachine.Result{Value: 1, Data: []byte(fmt.Sprintf("Migration task %d started successfully on source node %d.", taskId, leaderId))}, nil
 	case "migrate_dst":
 		// Format: migrate_dst:taskId,strlAddress,fromAddress,keyRange
 		kv := bytes.SplitN(params, []byte(","), 4)
@@ -174,7 +174,7 @@ func (s *KVStore) Update(data []byte) (statemachine.Result, error) {
 		krs := schema.ParseKeyRanges(kv[3])
 		s.migrationTaskId = taskId
 		s.migrate_krs = krs
-		return statemachine.Result{Value: 1, Data: []byte(fmt.Sprintf("Migration task %d started successfully on destination.", taskId))}, nil
+		return statemachine.Result{Value: 1, Data: []byte(fmt.Sprintf("Migration task %d started successfully on destination shard %d.", taskId, s.clusterId))}, nil
 	case "batch_write":
 		// Format: batch_write:taskId,key1,value1|key2,value2|...
 		params := bytes.SplitN(params, []byte(","), 2)

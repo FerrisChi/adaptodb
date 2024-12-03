@@ -199,14 +199,16 @@ func worker(id int, meta *Metadata, metrics *Metrics, wg *sync.WaitGroup, stopCh
 
 	var testKeys []string
 	for i := 0; i < 100; i++ {
-		testKeys = append(testKeys, generateKey())
-		status, err := write(testKeys[i], generateValue(), meta)
+		key := generateKey()
+		value := generateValue()
+		status, err := write(key, value, meta)
 		if err != nil || status == 0 {
 			atomic.AddUint64(&metrics.failedWrites, 1)
 			// log.Printf("Worker %d: Write error: %v", id, err)
 			continue
 		}
 		atomic.AddUint64(&metrics.successfulWrites, 1)
+		testKeys = append(testKeys, key)
 	}
 
 	for {
@@ -238,6 +240,7 @@ func worker(id int, meta *Metadata, metrics *Metrics, wg *sync.WaitGroup, stopCh
 					continue
 				}
 				atomic.AddUint64(&metrics.successfulWrites, 1)
+				testKeys = append(testKeys, key)
 			}
 		}
 	}
@@ -306,7 +309,7 @@ func main() {
 	log.Println(numWorkers, "Workers started")
 
 	go func(stopCh chan struct{}) {
-		ticker := time.NewTicker(30 * time.Second)
+		ticker := time.NewTicker(10 * time.Second)
 		for {
 			select {
 			case <-stopCh:

@@ -191,6 +191,38 @@ func (r *Router) ApplyMigration(ctx context.Context, req *pb.ApplyMigrationReque
 	return &pb.ApplyMigrationResponse{Status: result.Value}, nil
 }
 
+func (r *Router) CancelMigration(ctx context.Context, req *pb.CancelMigrationRequest) (*pb.CancelMigrationResponse, error) {
+	if req.GetTaskId() != r.migTaskId {
+		return nil, errors.New("task ID mismatch")
+	}
+
+	if _, ok := ctx.Deadline(); !ok {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, schema.READ_WRITE_TIMEOUT)
+		defer cancel()
+	}
+
+	session := r.nh.GetNoOPSession(r.clusterId)
+	var flag string
+	if r.migFlag == 1 {
+		flag = "add"
+	} else if r.migFlag == 2 {
+		flag = "remove"
+	}
+	data := []byte(fmt.Sprintf("apply_schedule:%s,%s", flag, schema.KeyRangeToString(r.migKeyRanges)))
+	result, err := r.nh.SyncPropose(ctx, session, data)
+	if err != nil {
+		return nil, errors.Join(errors.New("dragonboat error and panic"), err)
+	}
+	if result.Value == 0 {
+		return nil, errors.New("failed to propose migration cancellation: " + string(result.Data))
+	}
+	r.migTaskId = 0
+	r.migKeyRanges = nil
+	r.migFlag = 0
+	return &pb.CancelMigrationResponse{Status: string(result.Value)}, nil
+}
+
 func (r *Router) GetKeyRanges(ctx context.Context, req *pb.GetKeyRangesRequest) (*pb.GetKeyRangesResponse, error) {
 	if req.GetClusterID() != r.clusterId {
 		r.statsServer.IncrementFailedRequests()
