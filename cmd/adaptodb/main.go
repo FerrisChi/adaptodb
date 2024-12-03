@@ -1,6 +1,12 @@
 package main
 
 import (
+	"adaptodb/pkg/balancer"
+	"adaptodb/pkg/controller"
+	"adaptodb/pkg/metadata"
+	"adaptodb/pkg/router"
+	"adaptodb/pkg/schema"
+	"adaptodb/pkg/utils"
 	"fmt"
 	"log"
 	"net"
@@ -16,12 +22,8 @@ import (
 	"gopkg.in/yaml.v3"
 
 	// Custom imports for AdaptoDB components (hypothetical paths)
-	"adaptodb/pkg/balancer"
-	"adaptodb/pkg/controller"
-	"adaptodb/pkg/metadata"
+
 	pb "adaptodb/pkg/proto/proto"
-	"adaptodb/pkg/router"
-	"adaptodb/pkg/schema"
 )
 
 type SSHConfig struct {
@@ -40,10 +42,10 @@ type NodeSpec struct {
 }
 
 func main() {
-
+	logger := utils.NamedLogger("AdaptoDB Main")
 	logFile, err := os.OpenFile("adaptodb.log", os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0666)
 	if err != nil {
-		log.Fatalf("failed to open log file: %v", err)
+		logger.Fatalf("Failed to open log file: %v", err)
 	}
 	log.SetOutput(logFile)
 	log.SetFlags(log.Ltime | log.Lshortfile)
@@ -52,16 +54,16 @@ func main() {
 	config := schema.Config{}
 	data, err := os.ReadFile("config.yaml")
 	if err != nil {
-		log.Fatalf("failed to read configuration file: %v", err)
+		logger.Fatalf("Failed to read configuration file: %v", err)
 	}
 	print(string(data))
 
 	err = yaml.Unmarshal(data, &config)
 	if err != nil {
-		log.Fatalf("failed to load configuration: %v", err)
+		logger.Fatalf("Failed to load configuration: %v", err)
 	}
 
-	log.Print("Configuration: ", config)
+	logger.Logf("Configuration: ", config)
 
 	// https://github.com/golang/go/issues/17393
 	if runtime.GOOS == "darwin" {
@@ -71,7 +73,7 @@ func main() {
 	// Initialize Metadata Manager
 	metadata, err := metadata.NewMetadata(&config)
 	if err != nil {
-		log.Fatalf("failed to initialize Metadata Manager: %v", err)
+		logger.Fatalf("failed to initialize Metadata Manager: %v", err)
 	}
 
 	// Initialize Dragonboat Nodes
@@ -107,11 +109,11 @@ func main() {
 			}
 
 			if err := launcher.Launch(spec, groupMembers, keyRanges); err != nil {
-				log.Fatalf("failed to launch node %d: %v", nodeInfo.ID, err)
+				logger.Fatalf("failed to launch node %d: %v", nodeInfo.ID, err)
 			}
 		}
 	}
-	log.Println("All nodes have been launched. Waiting for Raft to stabilize...")
+	logger.Logf("All nodes have been launched. Waiting for Raft to stabilize...\n")
 	time.Sleep(schema.NODE_LAUNCH_TIMEOUT)
 	metadata.UpdateKeyRangeFromNode()
 
@@ -124,13 +126,13 @@ func main() {
 
 	lis, err := net.Listen("tcp", controllerAddress)
 	if err != nil {
-		log.Fatalf("failed to listen on port %s: %v", controllerAddress, err)
+		logger.Fatalf("failed to listen on port %s: %v", controllerAddress, err)
 	}
-	log.Println("gRPC server listening on", controllerAddress)
+	logger.Logf("gRPC server listening on", controllerAddress)
 
 	go func() {
 		if err := controllerGrpcServer.Serve(lis); err != nil {
-			log.Fatalf("failed to serve: %v", err)
+			logger.Fatalf("failed to serve: %v", err)
 		}
 	}()
 
@@ -138,7 +140,7 @@ func main() {
 	analyzer := balancer.NewDefaultAnalyzer("default", metadata)
 	balancer, err := balancer.NewBalancer(controllerAddress, analyzer)
 	if err != nil {
-		log.Fatalf("failed to initialize Balance Watcher: %v", err)
+		logger.Fatalf("failed to initialize Balance Watcher: %v", err)
 	}
 
 	// Initialize Request Router and HTTP server
@@ -147,9 +149,9 @@ func main() {
 	go func() {
 		http.HandleFunc("/", router.HandleRequest)
 		http.HandleFunc("/config", router.HandleConfigRequest)
-		log.Printf("HTTP server listening on localhost:60080")
+		logger.Logf("HTTP server listening on localhost:60080")
 		if err := http.ListenAndServe("localhost:60080", nil); err != nil {
-			log.Fatalf("failed to start HTTP server: %v", err)
+			logger.Fatalf("failed to start HTTP server: %v", err)
 		}
 	}()
 
@@ -161,13 +163,13 @@ func main() {
 	routerGrpcAddress := "localhost:60081"
 	lis, err = net.Listen("tcp", routerGrpcAddress)
 	if err != nil {
-		log.Fatalf("failed to listen on port %s: %v", routerGrpcAddress, err)
+		logger.Fatalf("failed to listen on port %s: %v", routerGrpcAddress, err)
 	}
-	log.Println("gRPC server listening on", routerGrpcAddress)
+	logger.Logf("gRPC server listening on", routerGrpcAddress)
 
 	go func() {
 		if err := routerGrpcServer.Serve(lis); err != nil {
-			log.Fatalf("failed to serve: %v", err)
+			logger.Fatalf("failed to serve: %v", err)
 		}
 	}()
 
@@ -178,7 +180,7 @@ func main() {
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
-	log.Println("AdaptoDB is running and awaiting requests...")
+	logger.Logf("AdaptoDB is running and awaiting requests...")
 
 	// Wait for termination signal
 	<-sigChan

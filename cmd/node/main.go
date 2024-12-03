@@ -26,7 +26,7 @@ import (
 )
 
 func main() {
-	logger := utils.NamedLogger("Main")
+	logger := utils.NamedLogger("Node Main")
 
 	nodeID := flag.Uint64("id", 0, "NodeID to start")
 	address := flag.String("address", "", "Node address (e.g. localhost:63001)")
@@ -98,15 +98,15 @@ func main() {
 		log.Fatalf("failed to start node: %v", err)
 	}
 
-	logger("Started node with the following configuration:")
+	logger.Logf("Started node with the following configuration:")
 
-	logger("NodeID: %d", *nodeID)
-	logger("Address: %s", *address)
-	logger("GroupID: %d", *groupID)
-	logger("DataDir: %s", *dataDir)
-	logger("WALDir: %s", *walDir)
-	logger("Members: %s", *members)
-	logger("KeyRange: %s", *keyrange)
+	logger.Logf("NodeID: %d", *nodeID)
+	logger.Logf("Address: %s", *address)
+	logger.Logf("GroupID: %d", *groupID)
+	logger.Logf("DataDir: %s", *dataDir)
+	logger.Logf("WALDir: %s", *walDir)
+	logger.Logf("Members: %s", *members)
+	logger.Logf("KeyRange: %s", *keyrange)
 
 	// If not initialized, wait for all nodes and propose initial key ranges
 	if !initialized {
@@ -141,7 +141,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("failed to listen on port %s: %v", statsGrpcAddress, err)
 	}
-	logger("Listening on %s", statsGrpcAddress)
+	logger.Logf("Listening on %s", statsGrpcAddress)
 
 	go func() {
 		if err := statsGrpcServer.Serve(lis); err != nil {
@@ -160,7 +160,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("failed to listen on port %s: %v", nodeGrpcAddress, err)
 	}
-	logger("Listening on %s", nodeGrpcAddress)
+	logger.Logf("Listening on %s", nodeGrpcAddress)
 
 	go func() {
 		if err := nodeGrpcServer.Serve(lis); err != nil {
@@ -182,9 +182,9 @@ func main() {
 
 	// Start HTTP server in goroutine
 	go func() {
-		log.Printf("Starting HTTP server on %s", nodeHttpAddress)
+		logger.Logf("Starting HTTP server on %s", nodeHttpAddress)
 		if err := httpServer.ListenAndServe(); err != http.ErrServerClosed {
-			log.Fatalf("HTTP server error: %v", err)
+			logger.Fatalf("HTTP server error: %v", err)
 		}
 	}()
 
@@ -200,10 +200,10 @@ func main() {
 	// Stop all servers
 	nodeGrpcServer.GracefulStop()
 	if err := httpServer.Shutdown(ctx); err != nil {
-		log.Printf("HTTP server shutdown error: %v", err)
+		logger.Logf("HTTP server shutdown error: %v", err)
 	}
 	nh.Stop()
 	nodeGrpcServer.Stop()
 	statsGrpcServer.Stop()
-	logger("Node stopped")
+	logger.Logf("Node stopped")
 }

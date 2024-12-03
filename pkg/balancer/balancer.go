@@ -60,7 +60,7 @@ func NewBalancer(address string, analyzer Analyzer) (*Balancer, error) {
 }
 
 func (b *Balancer) StartMonitoring() {
-	ticker := time.NewTicker(30000 * time.Second)
+	ticker := time.NewTicker(15 * time.Second)
 	defer ticker.Stop()
 
 	for {
@@ -95,12 +95,12 @@ func (c *Balancer) sendShardUpdate(newSchedule []schema.Schedule) {
 
 	go func() {
 		resp, err := c.client.UpdateSchedule(context.Background(), req)
-		logger("Sending update schedule request: %v\n", req)
+		logger.Logf("Sending update schedule request: %v\n", req)
 		if err != nil {
-			logger("Error sending shard update: %v", err)
+			logger.Logf("Error sending shard update: %v", err)
 			return
 		}
-		logger("Shard update response: %s", resp.Message)
+		logger.Logf("Shard update response: %s", resp.Message)
 	}()
 }
 

@@ -106,10 +106,10 @@ func (a *DefaultAnalyzer) collectMetrics() ([]*NodeMetrics, error) {
 		// Try to query all members of the shard
 		for _, member := range shard.Members {
 			statsAddr := fmt.Sprintf("%s:%d", strings.Split(member.GrpcAddress, ":")[0], 53000+member.ID)
-			logger("Querying node stats for %s", statsAddr)
+			logger.Logf("Querying node stats for %s", statsAddr)
 			res, err := queryNodeStats(statsAddr)
 			if err != nil {
-				logger("Failed to query node stats: %v", err)
+				logger.Logf("Failed to query node stats: %v", err)
 				ret = append(ret, &NodeMetrics{
 					ShardID:              shard.ShardID,
 					NodeID:               member.ID,
@@ -118,10 +118,10 @@ func (a *DefaultAnalyzer) collectMetrics() ([]*NodeMetrics, error) {
 					NumFailedRequests:    -1,
 				})
 			} else {
-				logger("Node %d in Shard %d has %d entries:", member.ID, shard.ShardID, res.NumEntries)
-				logger("Successful Requests: ", res.NumSuccessfulRequets)
-				logger("Failed Requests: ", res.NumFailedRequests)
-				logger("Last Reset Time: ", res.LastResetTime)
+				logger.Logf("Node %d in Shard %d has %d entries:", member.ID, shard.ShardID, res.NumEntries)
+				logger.Logf("Successful Requests: ", res.NumSuccessfulRequets)
+				logger.Logf("Failed Requests: ", res.NumFailedRequests)
+				logger.Logf("Last Reset Time: ", res.LastResetTime)
 				res.ShardID = shard.ShardID
 				res.NodeID = member.ID
 				ret = append(ret, res)
