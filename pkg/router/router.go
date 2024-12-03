@@ -3,6 +3,7 @@ package router
 import (
 	"adaptodb/pkg/metadata"
 	pb "adaptodb/pkg/proto/proto"
+	"adaptodb/pkg/schema"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -44,14 +45,24 @@ func (r *Router) HandleRequest(w http.ResponseWriter, q *http.Request) {
 // http.HandleFunc("/config", router.HandleConfigRequest)
 func (r *Router) HandleConfigRequest(w http.ResponseWriter, q *http.Request) {
 	log.Printf("Received request from %s", q.RemoteAddr)
-	mapping, error := r.metadata.GetAllShardKeyRanges()
-	if error != nil {
-		http.Error(w, "Failed to get shard mapping", http.StatusInternalServerError)
-		return
+
+	// Get and convert member information
+	result := make(map[uint64][]schema.KeyRange)
+	memberMap := make(map[uint64][]schema.NodeInfo)
+	for _, v := range r.metadata.Config.RaftGroups {
+		shardId := v.ShardID
+		memberMap[shardId] = v.Members
+		result[shardId] = v.KeyRanges
 	}
-	// return the mapping: uint64 -> []schema.KeyRange
+
+	// Prepare combined response
+	response := schema.ConfigResponse{
+		ShardMap: result,
+		Members:  memberMap,
+	}
+
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(mapping)
+	json.NewEncoder(w).Encode(response)
 }
 
 // gRPC handler
@@ -88,7 +99,7 @@ func (r *Router) GetConfig(ctx context.Context, req *pb.GetConfigRequest) (*pb.G
 		shardId := v.ShardID
 		members := make([]*pb.Member, 0, len(v.Members))
 		for _, nodeInfo := range v.Members {
-			members = append(members, &pb.Member{Id: nodeInfo.ID, Addr: nodeInfo.RpcAddress, User: nodeInfo.User, SshKeyPath: nodeInfo.SSHKeyPath})
+			members = append(members, &pb.Member{Id: nodeInfo.ID, Addr: nodeInfo.GrpcAddress, User: nodeInfo.User, SshKeyPath: nodeInfo.SSHKeyPath})
 		}
 		memberMap[shardId] = &pb.Members{Members: members}
 	}

@@ -146,9 +146,9 @@ func (sc *Controller) performDataMigration(schedule []*schema.Schedule) error {
 	return nil
 }
 
-func (sc *Controller) findOperator(fromClusterID, toClusterID uint64) *Operator {
+func (sc *Controller) findOperator(taskId uint64) *Operator {
 	for _, op := range sc.operators {
-		if op.fromShard.ShardID == fromClusterID && op.toShard.ShardID == toClusterID {
+		if op.taskId == taskId {
 			return op
 		}
 	}
@@ -166,9 +166,9 @@ func (sc *Controller) findOperatorByTaskID(taskId uint64) *Operator {
 
 func (sc *Controller) CancelMigrationFromNode(ctx context.Context, req *pb.CancelMigrationRequest) (*pb.CancelMigrationResponse, error) {
 	log.Println("Received request to cancel migration")
-	op := sc.findOperator(req.GetFromClusterID(), req.GetToClusterID())
+	op := sc.findOperator(req.GetTaskId())
 	if op == nil {
-		log.Panicln("Migration not found")
+		log.Println("Migration not found", req.GetTaskId())
 	}
 	err := op.cancelMigration()
 	if err != nil {
@@ -184,7 +184,7 @@ func (sc *Controller) FinishMigration(ctx context.Context, req *pb.FinishMigrati
 	log.Println("Received transfer done notification")
 	op := sc.findOperatorByTaskID(req.GetTaskId())
 	if op == nil {
-		log.Panicln("Migration not found")
+		log.Println("Migration not found", req.GetTaskId())
 	}
 
 	err := op.finishMigration()

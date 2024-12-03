@@ -41,7 +41,7 @@ func getRandomNodeHTTPServer(shard schema.RaftGroup) (schema.NodeInfo, string) {
 	// idx := uint64(rand.Intn(len(shard.Members)))
 	idx := uint64(0)
 	node := shard.Members[idx]
-	httpAddress := fmt.Sprintf("%s:%d", strings.Split(node.RpcAddress, ":")[0], 52000+node.ID)
+	httpAddress := fmt.Sprintf("%s:%d", strings.Split(node.GrpcAddress, ":")[0], 52000+node.ID)
 	return node, httpAddress
 }
 
@@ -52,7 +52,7 @@ func (op *Operator) migrate(ctx context.Context) error {
 	toNode, toHttpAddress := getRandomNodeHTTPServer(op.toShard)
 	op.fromNode, op.toNode = fromNode, toNode
 	fromConn, err := grpc.NewClient(
-		op.fromNode.RpcAddress,
+		op.fromNode.GrpcAddress,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithDefaultCallOptions(
 			grpc.MaxCallRecvMsgSize(64*1024*1024),
@@ -66,7 +66,7 @@ func (op *Operator) migrate(ctx context.Context) error {
 	fromClient := pb.NewNodeRouterClient(fromConn)
 
 	toConn, err := grpc.NewClient(
-		op.toNode.RpcAddress,
+		op.toNode.GrpcAddress,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	)
 	if err != nil {
@@ -109,7 +109,7 @@ func (op *Operator) migrate(ctx context.Context) error {
 
 func (op *Operator) cancelMigration() error {
 	fromConn, err := grpc.NewClient(
-		op.fromNode.RpcAddress,
+		op.fromNode.GrpcAddress,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	)
 	if err != nil {
@@ -119,7 +119,7 @@ func (op *Operator) cancelMigration() error {
 	fromClient := pb.NewNodeRouterClient(fromConn)
 
 	toConn, err := grpc.NewClient(
-		op.toNode.RpcAddress,
+		op.toNode.GrpcAddress,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	)
 	if err != nil {
@@ -130,8 +130,7 @@ func (op *Operator) cancelMigration() error {
 
 	// Send cancellation requests to both nodes
 	cancelReq := &pb.CancelMigrationRequest{
-		FromClusterID: op.fromShard.ShardID,
-		ToClusterID:   op.toShard.ShardID,
+		TaskId: op.taskId,
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -155,7 +154,7 @@ func (op *Operator) cancelMigration() error {
 
 func (op *Operator) finishMigration() error {
 	fromConn, err := grpc.NewClient(
-		op.fromNode.RpcAddress,
+		op.fromNode.GrpcAddress,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	)
 	if err != nil {
@@ -165,7 +164,7 @@ func (op *Operator) finishMigration() error {
 	fromClient := pb.NewNodeRouterClient(fromConn)
 
 	toConn, err := grpc.NewClient(
-		op.toNode.RpcAddress,
+		op.toNode.GrpcAddress,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	)
 	if err != nil {

@@ -4,7 +4,6 @@ import (
 	"adaptodb/pkg/schema"
 	"bytes"
 	"encoding/gob"
-	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -15,6 +14,17 @@ import (
 
 	"github.com/lni/dragonboat/v3/statemachine"
 )
+
+// serializedKV is used for gob encoding
+type serializedKV struct {
+	Key   interface{}
+	Value interface{}
+}
+
+type serializedSnapshot struct {
+	KVPairs []serializedKV
+	Krs     []schema.KeyRange
+}
 
 type KVStore struct {
 	clusterId       uint64
@@ -27,7 +37,8 @@ type KVStore struct {
 }
 
 type LookupResult struct {
-	Value      string
+	Value      uint64
+	Data       string
 	NumEntries int64
 }
 
@@ -48,7 +59,7 @@ func NewKVStore(shardID uint64, replicaID uint64) statemachine.IStateMachine {
 func (s *KVStore) Lookup(query interface{}) (interface{}, error) {
 	str, ok := query.(string)
 	if !ok {
-		return nil, errors.New("invalid query type")
+		return LookupResult{Value: 0, Data: "invalid query type", NumEntries: s.NumEntries}, nil
 	}
 	log.Println("Lookup query:", str)
 	tmp := strings.Split(str, ":")
@@ -59,21 +70,21 @@ func (s *KVStore) Lookup(query interface{}) (interface{}, error) {
 			if key >= kr.Start && key < kr.End {
 				value, exists := s.Data.Load(key)
 				if !exists {
-					return LookupResult{Value: "", NumEntries: 1}, errors.New("key not found")
+					return LookupResult{Value: 0, Data: "key " + key + " not found", NumEntries: 1}, nil
 				}
-				return LookupResult{Value: value.(string), NumEntries: s.NumEntries}, nil
+				return LookupResult{Value: 1, Data: value.(string), NumEntries: s.NumEntries}, nil
 			}
 		}
 		for _, kr := range s.migrate_krs {
 			if key >= kr.Start && key < kr.End {
-				return LookupResult{Value: "", NumEntries: s.NumEntries}, errors.New("key in migration")
+				return LookupResult{Value: 0, Data: "key " + key + " in migration", NumEntries: s.NumEntries}, nil
 			}
 		}
-		return LookupResult{Value: "", NumEntries: s.NumEntries}, errors.New("key not managed by this node")
+		return LookupResult{Value: 0, Data: "key " + key + " not managed by this node", NumEntries: s.NumEntries}, nil
 	case "schedule":
-		return s.krs, nil
+		return LookupResult{Value: 1, Data: schema.KeyRangeToString(s.krs), NumEntries: s.NumEntries}, nil
 	default:
-		return LookupResult{Value: "", NumEntries: s.NumEntries}, errors.New("invalid query")
+		return LookupResult{Value: 0, Data: "invalid query", NumEntries: s.NumEntries}, nil
 	}
 }
 
@@ -84,16 +95,17 @@ func (s *KVStore) Update(data []byte) (statemachine.Result, error) {
 	tmp := bytes.SplitN(data, []byte(":"), 2)
 	if len(tmp) != 2 {
 		// invalid operation format
-		return statemachine.Result{}, errors.New("invalid operation format")
+		return statemachine.Result{Value: 0, Data: []byte("invalid operation format")}, nil
 	}
 	opType, params := string(tmp[0]), tmp[1]
 	log.Println("opType", opType, "params", string(params))
 	switch opType {
 	case "write":
+		// Format: write:key,value
 		kv := bytes.SplitN(params, []byte(","), 2)
 		if len(kv) != 2 {
 			// invalid write format
-			return statemachine.Result{}, errors.New("invalid write format")
+			return statemachine.Result{Value: 0, Data: []byte("invalid write format")}, nil
 		}
 		key, value := string(kv[0]), string(kv[1])
 		for _, kr := range s.krs {
@@ -105,8 +117,9 @@ func (s *KVStore) Update(data []byte) (statemachine.Result, error) {
 				return statemachine.Result{Value: 1, Data: []byte(fmt.Sprintf("Key %s Value %s written successfully.", key, value))}, nil
 			}
 		}
-		return statemachine.Result{}, errors.New("key not managed by this node")
+		return statemachine.Result{Value: 0, Data: []byte("key " + key + " not managed by this node. Key ranges: " + fmt.Sprint(s.krs))}, nil
 	case "remove":
+		// Format: remove:key
 		key := string(params)
 		s.Data.Delete(key)
 		return statemachine.Result{Value: 1, Data: []byte(fmt.Sprintf("Key %s removed successfully.", key))}, nil
@@ -114,18 +127,18 @@ func (s *KVStore) Update(data []byte) (statemachine.Result, error) {
 		// Format: migrate_src:taskId,leaderId,ctrlAddress,toAddress,keyRange
 		kv := bytes.SplitN(params, []byte(","), 5)
 		if len(kv) != 5 {
-			return statemachine.Result{}, errors.New("invalid migrate format")
+			return statemachine.Result{Value: 0, Data: []byte("invalid migrate format")}, nil
 		}
 		taskId, err := strconv.ParseUint(string(kv[0]), 10, 64)
 		if err != nil {
-			return statemachine.Result{}, errors.New("invalid task ID")
+			return statemachine.Result{Value: 0, Data: []byte("invalid task ID")}, nil
 		}
 		leaderId, err := strconv.ParseUint(string(kv[1]), 10, 64)
 		if err != nil {
-			return statemachine.Result{}, errors.New("invalid leader ID")
+			return statemachine.Result{Value: 0, Data: []byte("invalid leader ID")}, nil
 		}
 		if s.migrationTaskId != 0 {
-			return statemachine.Result{}, errors.New("another migration task in progress")
+			return statemachine.Result{Value: 0, Data: []byte("another migration task in progress")}, nil
 		}
 		toAddress := string(kv[3])
 		krs := schema.ParseKeyRanges(kv[4])
@@ -149,14 +162,14 @@ func (s *KVStore) Update(data []byte) (statemachine.Result, error) {
 		// Format: migrate_dst:taskId,strlAddress,fromAddress,keyRange
 		kv := bytes.SplitN(params, []byte(","), 4)
 		if len(kv) != 4 {
-			return statemachine.Result{}, errors.New("invalid migrate format")
+			return statemachine.Result{Value: 0, Data: []byte("invalid migrate format")}, nil
 		}
 		taskId, err := strconv.ParseUint(string(kv[0]), 10, 64)
 		if err != nil {
-			return statemachine.Result{}, errors.New("invalid task ID")
+			return statemachine.Result{Value: 0, Data: []byte("invalid task ID")}, nil
 		}
 		if s.migrationTaskId != 0 {
-			return statemachine.Result{}, errors.New("another migration task in progress")
+			return statemachine.Result{Value: 0, Data: []byte("another migration task in progress")}, nil
 		}
 		krs := schema.ParseKeyRanges(kv[3])
 		s.migrationTaskId = taskId
@@ -167,10 +180,10 @@ func (s *KVStore) Update(data []byte) (statemachine.Result, error) {
 		params := bytes.SplitN(params, []byte(","), 2)
 		taskId, err := strconv.ParseUint(string(params[0]), 10, 64)
 		if err != nil {
-			return statemachine.Result{}, errors.New("invalid task ID")
+			return statemachine.Result{Value: 0, Data: []byte("invalid task ID")}, nil
 		}
 		if s.migrationTaskId != taskId {
-			return statemachine.Result{}, errors.New("task ID mismatch")
+			return statemachine.Result{Value: 0, Data: []byte("task ID mismatch")}, nil
 		}
 		pairs := bytes.Split(params[1], []byte("|"))
 		succ := 0
@@ -195,20 +208,47 @@ func (s *KVStore) Update(data []byte) (statemachine.Result, error) {
 		log.Println("Applied Key Ranges", s.krs)
 		return statemachine.Result{Value: 1, Data: []byte("Schedule" + string(params[1]) + " applied." + strconv.FormatUint(cnt, 10) + " entries modified.")}, nil
 	default:
-		return statemachine.Result{}, errors.New("unknown operation type")
+		return statemachine.Result{Value: 0, Data: []byte("unknown operation type")}, nil
 	}
 }
 
 // SaveSnapshot saves the current state for recovery in case of failure.
 func (s *KVStore) SaveSnapshot(writer io.Writer, _ statemachine.ISnapshotFileCollection, _ <-chan struct{}) error {
+	var kvPairs []serializedKV
+
+	s.Data.Range(func(key, value interface{}) bool {
+		kvPairs = append(kvPairs, serializedKV{
+			Key:   key,
+			Value: value,
+		})
+		return true
+	})
+
+	snapshot := serializedSnapshot{
+		KVPairs: kvPairs,
+		Krs:     s.krs,
+	}
+
 	encoder := gob.NewEncoder(writer)
-	return encoder.Encode(&s.Data)
+	return encoder.Encode(snapshot)
 }
 
-// RecoverFromSnapshot restores the state machine's data from a snapshot.
+// RecoverFromSnapshot recovers the state machine from a snapshot.
 func (s *KVStore) RecoverFromSnapshot(reader io.Reader, _ []statemachine.SnapshotFile, _ <-chan struct{}) error {
 	decoder := gob.NewDecoder(reader)
-	return decoder.Decode(&s.Data)
+
+	var snapshot serializedSnapshot
+	if err := decoder.Decode(&snapshot); err != nil {
+		return err
+	}
+
+	for _, kv := range snapshot.KVPairs {
+		s.Data.Store(kv.Key, kv.Value)
+	}
+
+	s.krs = snapshot.Krs
+
+	return nil
 }
 
 // Close releases any resources held by the state machine.

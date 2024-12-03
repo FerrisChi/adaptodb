@@ -3,24 +3,30 @@ raftGroups:
     members:
       - id: 1
         raftAddress: "localhost:63001" # ip:port
-        address: "localhost:51001"
+        grpcAddress: "localhost:51001"
+        httpAddress: "localhost:52001"
       - id: 2
         raftAddress: "localhost:63002"
-        address: "localhost:51002"
+        grpcAddress: "localhost:51002"
+        httpAddress: "localhost:52002"
       - id: 3
         raftAddress: "127.0.0.1:63003"
-        address: "127.0.0.1:51003"
+        grpcAddress: "127.0.0.1:51003"
+        httpAddress: "127.0.0.1:52003"
   - shardID: 2
     members:
       - id: 4
         raftAddress: "localhost:64001"
-        address: "localhost:51004"
+        grpcAddress: "localhost:51004"
+        httpAddress: "localhost:52004"
       - id: 5
         raftAddress: "localhost:64002"
-        address: "localhost:51005"
+        grpcAddress: "localhost:51005"
+        httpAddress: "localhost:52005"
       - id: 6
         raftAddress: "localhost:64003"
-        address: "localhost:51006"
+        grpcAddress: "localhost:51006"
+        httpAddress: "localhost:52006"
     # - id: 7
     #   host: "remote-host"
     #   user: "root"
