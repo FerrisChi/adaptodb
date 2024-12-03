@@ -1,0 +1,47 @@
+# Stage 1: Build Stage
+FROM golang:1.22.7 as builder
+
+# Set the working directory inside the container
+WORKDIR /app
+
+# Install Protobuf and gRPC plugins
+RUN apt-get update && apt-get install -y protobuf-compiler && \
+    go install google.golang.org/protobuf/cmd/protoc-gen-go@latest && \
+    go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest && \
+    export PATH="$PATH:$(go env GOPATH)/bin"
+
+# Copy go.mod and go.sum to fetch dependencies
+COPY go.mod go.sum ./
+RUN go mod tidy
+
+# Copy the entire source code into the container
+COPY . .
+
+# Generate Protobuf code
+RUN mkdir -p pkg/proto/proto && \
+    protoc --proto_path=pkg/proto \
+        --go_out=pkg/proto/proto --go_opt=paths=source_relative \
+        --go-grpc_out=pkg/proto/proto --go-grpc_opt=paths=source_relative \
+        pkg/proto/*.proto
+
+# Build the node binary
+RUN make release
+
+# Stage 2: Runtime Stage
+FROM debian:bookworm-slim
+
+# Install runtime dependencies
+RUN apt-get update && apt-get install -y ca-certificates && rm -rf /var/lib/apt/lists/*
+
+# Set the working directory inside the container
+WORKDIR /app
+
+# Copy the built release binary from the builder stage
+COPY --from=builder /app/bin/release/node /app/node
+
+# Expose necessary ports
+EXPOSE 51000-54000
+EXPOSE 63000-65000
+
+# Set the entrypoint to the node binary
+CMD ["./node"]
