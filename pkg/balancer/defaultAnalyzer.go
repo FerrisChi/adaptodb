@@ -6,6 +6,7 @@ import (
 	"adaptodb/pkg/schema"
 	"adaptodb/pkg/utils"
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"strings"
@@ -28,48 +29,39 @@ func NewDefaultAnalyzer(strategy string, metadata *metadata.Metadata) Analyzer {
 }
 
 func (a *DefaultAnalyzer) AnalyzeLoads() ([]schema.Schedule, bool) {
+	logger := utils.NamedLogger("DefaultAnalyzer")
 	// 1. collect metrics
 	loads, err := a.collectMetrics()
 	if err != nil {
-		log.Printf("Failed to collect metrics: %v", err)
+		logger.Logf("Failed to collect metrics: %v", err)
 		return []schema.Schedule{}, false
 	}
 
+	// Logging metrics
+	// for i, metric := range loads {
+	// 	if metric == nil {
+	// 		logger.Logf("Metric %d: nil", i)
+	// 		continue
+	// 	}
+	// 	logger.Logf("Metric %d: %+v", i, *metric)
+	// }
+
 	// 2. detect imbalances
-	imbalancedShards, err := a.detectImbalanceShards(loads)
-	if err != nil {
-		log.Printf("Failed to detect imbalanced shards: %v", err)
-		return []schema.Schedule{}, false
-	}
+	imbalancedShards := DetectRelativeImbalance(loads, 10)
+	logger.Logf("ImbalancedShards: %v", imbalancedShards)
 	if len(imbalancedShards) == 0 {
 		return []schema.Schedule{}, false
 	}
 
 	// 3. create new schedules
-	newSchedules, err := a.createShardSchedules(imbalancedShards, loads, a.strategy)
+	newSchedules, err := a.createShardSchedules(loads, imbalancedShards)
 	if err != nil {
 		log.Printf("Failed to create new schedules: %v", err)
 		return []schema.Schedule{}, false
 	}
 
 	return newSchedules, len(newSchedules) > 0
-}
-
-func (a *DefaultAnalyzer) detectImbalanceShards(loads []*NodeMetrics) ([]uint64, error) {
-	var imbalancedShards []uint64
-	avgEntries := 0.0
-	for _, load := range loads {
-		avgEntries += float64(load.NumEntries)
-	}
-	avgEntries /= float64(len(loads))
-
-	// If a shard is responsible for more than twice the average number of entries, it is considered imbalanced
-	for idx, load := range loads {
-		if float64(load.NumEntries) > avgEntries*2 {
-			imbalancedShards = append(imbalancedShards, uint64(idx))
-		}
-	}
-	return imbalancedShards, nil
+	// return []schema.Schedule{}, false
 }
 
 func queryNodeStats(nodeAddress string) (*NodeMetrics, error) {
@@ -119,9 +111,7 @@ func (a *DefaultAnalyzer) collectMetrics() ([]*NodeMetrics, error) {
 				})
 			} else {
 				logger.Logf("Node %d in Shard %d has %d entries:", member.ID, shard.ShardID, res.NumEntries)
-				logger.Logf("Successful Requests: ", res.NumSuccessfulRequets)
-				logger.Logf("Failed Requests: ", res.NumFailedRequests)
-				logger.Logf("Last Reset Time: ", res.LastResetTime)
+				logger.Logf("Successful Requests: %d, Failed Requests, %d, Last Reset Time: %d", res.NumSuccessfulRequets, res.NumFailedRequests, res.LastResetTime)
 				res.ShardID = shard.ShardID
 				res.NodeID = member.ID
 				ret = append(ret, res)
@@ -133,20 +123,32 @@ func (a *DefaultAnalyzer) collectMetrics() ([]*NodeMetrics, error) {
 }
 
 // Create new shard key range schedules for the imbalanced shards
-func (a *DefaultAnalyzer) createShardSchedules(imbalancedShards []uint64, loads []*NodeMetrics, strategy string) ([]schema.Schedule, error) {
-	newSchedules := make([]schema.Schedule, 0)
-	// Example: Dummy logic to create new schedules
-	for _, idx := range imbalancedShards {
-		// create a new key range based on the strategy
+func (a *DefaultAnalyzer) createShardSchedules(loads []*NodeMetrics, imbalancedShards []uint64) ([]schema.Schedule, error) {
+	logger := utils.NamedLogger("DefaultAnalyzer")
+	allShardKeyRanges := make(map[uint64][]schema.KeyRange)
+
+	for idx := range loads {
+		// Get the shard ID
 		shardID := loads[idx].ShardID
-		orig_ranges := a.metadata.GetShardKeyRanges(shardID)
-		if orig_ranges == nil {
+
+		// Retrieve original key ranges for the shard
+		shardKeyRanges := a.metadata.GetShardKeyRanges(shardID)
+		if shardKeyRanges == nil {
 			continue
 		}
-		newSchedules = append(newSchedules, schema.Schedule{
-			ShardID:   shardID,
-			KeyRanges: orig_ranges,
-		})
+
+		// Populate the map with key ranges
+		allShardKeyRanges[shardID] = shardKeyRanges
 	}
-	return newSchedules, nil
+	logger.Logf("Current Key Ranges: %v", allShardKeyRanges)
+
+	recommendedSchedules := BalanceStringKeyRangesByMidpoint(loads, imbalancedShards, allShardKeyRanges)
+
+	if recommendedSchedules == nil {
+		return nil, errors.New("No recommended schedules")
+	}
+
+	logger.Logf("Recommending schedules: %v", recommendedSchedules)
+
+	return recommendedSchedules, nil
 }
