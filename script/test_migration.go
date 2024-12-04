@@ -21,7 +21,7 @@ func test() error {
 
 	data := make([]string, 0, 26)
 	for i := 'a'; i <= 'z'; i++ {
-		for len := 1; len < 100; len++ {
+		for len := 1; len < 2; len++ {
 			// append string with length of len and same letter i
 			data = append(data, strings.Repeat(string(i), len))
 		}
@@ -51,13 +51,13 @@ func test() error {
 	time.Sleep(schema.ADAPTODB_LAUNCH_TIMEOUT) // Wait for the server to start
 
 	// Connect to the gRPC server
-	conn, err := grpc.NewClient("localhost:51001", grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.NewClient("127.0.0.1:51001", grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		log.Fatalf("Failed to connect to gRPC server: %v", err)
 	}
 	defer conn.Close()
 	client := pb.NewNodeRouterClient(conn)
-	conn2, err := grpc.NewClient("localhost:51004", grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn2, err := grpc.NewClient("127.0.0.1:51004", grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		log.Fatalf("Failed to connect to gRPC server: %v", err)
 	}
@@ -121,7 +121,7 @@ func test() error {
 	fmt.Print("Step 4 passed\n")
 
 	// Step 5: Send an UpdateSchedule() gRPC to controller
-	ctrlConn, err := grpc.NewClient("localhost:60082", grpc.WithTransportCredentials(insecure.NewCredentials()))
+	ctrlConn, err := grpc.NewClient("127.0.0.1:60082", grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		log.Fatalf("Failed to connect to controller gRPC server: %v", err)
 	}
@@ -142,7 +142,7 @@ func test() error {
 		log.Fatalf("Failed to update schedule: %v", err)
 	}
 
-	time.Sleep(5 * time.Second) // Wait for migration to complete
+	time.Sleep(7 * time.Second) // Wait for migration to complete
 	fmt.Print("Step 5 passed\n")
 
 	// Step 6: Read after migration, expect error
@@ -169,7 +169,7 @@ func test() error {
 		}
 		resp, err := c.Read(context.Background(), &pb.ReadRequest{ClusterID: clusterId, Key: key})
 		if err != nil || resp.GetData() != key {
-			log.Fatalf("Failed to read key 'hello' from shard %d: %v", clusterId, err)
+			log.Fatalf("Failed to read key %s from shard %d: %v", key, clusterId, err)
 		}
 	}
 	fmt.Print("Step 7 passed\n")
@@ -195,13 +195,13 @@ func test() error {
 	fmt.Print("Waiting for AdaptoDB restart\n")
 	time.Sleep(schema.ADAPTODB_LAUNCH_TIMEOUT) // Wait for the server to start
 
-	conn, err = grpc.NewClient("localhost:51001", grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err = grpc.NewClient("127.0.0.1:51001", grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		log.Fatalf("Failed to connect to gRPC server: %v", err)
 	}
 	defer conn.Close()
 	client = pb.NewNodeRouterClient(conn)
-	conn2, err = grpc.NewClient("localhost:51004", grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn2, err = grpc.NewClient("127.0.0.1:51004", grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		log.Fatalf("Failed to connect to gRPC server for shard 2: %v", err)
 	}

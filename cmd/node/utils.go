@@ -25,7 +25,7 @@ func formatPBKeyRanges(krs []*pb.KeyRange) string {
 func (r Router) cancelMigrationFromNode() {
 	conn, err := grpc.NewClient(r.ctrlAddress, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
-		log.Fatalf("Failed to connect to gRPC server: %v", err)
+		log.Printf("Failed to connect to gRPC server: %v", err)
 	}
 	defer conn.Close()
 	client := pb.NewControllerClient(conn)
@@ -34,7 +34,7 @@ func (r Router) cancelMigrationFromNode() {
 	req := &pb.CancelMigrationRequest{TaskId: r.migTaskId}
 	_, err = client.CancelMigrationFromNode(ctx, req)
 	if err != nil {
-		log.Fatalf("Failed to cancel migration: %v", err)
+		log.Printf("Failed to cancel migration: %v", err)
 	}
 
 	// Reset migration state

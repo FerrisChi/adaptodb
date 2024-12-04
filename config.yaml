@@ -2,13 +2,13 @@ raftGroups:
   - shardID: 1
     members:
       - id: 1
-        raftAddress: "localhost:63001" # ip:port
-        grpcAddress: "localhost:51001"
-        httpAddress: "localhost:52001"
+        raftAddress: "127.0.0.1:63001" # ip:port
+        grpcAddress: "127.0.0.1:51001"
+        httpAddress: "127.0.0.1:52001"
       - id: 2
-        raftAddress: "localhost:63002"
-        grpcAddress: "localhost:51002"
-        httpAddress: "localhost:52002"
+        raftAddress: "127.0.0.1:63002"
+        grpcAddress: "127.0.0.1:51002"
+        httpAddress: "127.0.0.1:52002"
       - id: 3
         raftAddress: "127.0.0.1:63003"
         grpcAddress: "127.0.0.1:51003"
@@ -16,17 +16,17 @@ raftGroups:
   - shardID: 2
     members:
       - id: 4
-        raftAddress: "localhost:64001"
-        grpcAddress: "localhost:51004"
-        httpAddress: "localhost:52004"
+        raftAddress: "127.0.0.1:64001"
+        grpcAddress: "127.0.0.1:51004"
+        httpAddress: "127.0.0.1:52004"
       - id: 5
-        raftAddress: "localhost:64002"
-        grpcAddress: "localhost:51005"
-        httpAddress: "localhost:52005"
+        raftAddress: "127.0.0.1:64002"
+        grpcAddress: "127.0.0.1:51005"
+        httpAddress: "127.0.0.1:52005"
       - id: 6
-        raftAddress: "localhost:64003"
-        grpcAddress: "localhost:51006"
-        httpAddress: "localhost:52006"
+        raftAddress: "127.0.0.1:64003"
+        grpcAddress: "127.0.0.1:51006"
+        httpAddress: "127.0.0.1:52006"
     # - id: 7
     #   host: "remote-host"
     #   user: "root"

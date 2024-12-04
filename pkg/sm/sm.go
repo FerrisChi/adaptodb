@@ -205,7 +205,7 @@ func (s *KVStore) Update(data []byte) (statemachine.Result, error) {
 		cnt := s.updateSchedule(flag, krs)
 		s.migrationTaskId = 0
 		s.migrate_krs = nil
-		log.Println("Applied Key Ranges", s.krs)
+		log.Printf("Applied Key Ranges %s %v. Now Schedule: %v", flag, krs, s.krs)
 		return statemachine.Result{Value: 1, Data: []byte("Schedule" + string(params[1]) + " applied." + strconv.FormatUint(cnt, 10) + " entries modified.")}, nil
 	default:
 		return statemachine.Result{Value: 0, Data: []byte("unknown operation type")}, nil

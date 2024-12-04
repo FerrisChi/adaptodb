@@ -39,8 +39,8 @@ func startTransfer(taskId uint64, toAddress string, krs []schema.KeyRange, data 
 		if err == nil {
 			break
 		}
-		log.Printf("Connection attempt %d failed: %v", retries+1, err)
-		time.Sleep(time.Second * 2)
+		log.Printf("Connection %s attempt %d failed: %v", wsURL, retries+1, err)
+		time.Sleep(time.Second * 1)
 	}
 
 	if err != nil {

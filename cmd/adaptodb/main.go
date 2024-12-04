@@ -122,7 +122,7 @@ func initializeNodes(config schema.Config, metadataManager *metadata.Metadata, l
 	Fatalf func(format string, v ...interface{})
 },
 ) *Launcher {
-	controllerAddress := "localhost:60082"
+	controllerAddress := "127.0.0.1:60082"
 	launcher := NewLauncher(controllerAddress)
 
 	for _, group := range config.RaftGroups {
@@ -208,8 +208,8 @@ func startHTTPServer(metadataManager *metadata.Metadata, logger struct {
 	go func() {
 		http.HandleFunc("/", router.HandleRequest)
 		http.HandleFunc("/config", router.HandleConfigRequest)
-		logger.Logf("HTTP server listening on localhost:60080")
-		if err := http.ListenAndServe("localhost:60080", nil); err != nil {
+		logger.Logf("HTTP server listening on 127.0.0.1:60080")
+		if err := http.ListenAndServe("127.0.0.1:60080", nil); err != nil {
 			logger.Fatalf("Failed to start HTTP server: %v", err)
 		}
 	}()
@@ -226,7 +226,7 @@ func startRouterGRPCServer(metadataManager *metadata.Metadata, logger struct {
 	pb.RegisterShardRouterServer(grpcServer, router)
 	reflection.Register(grpcServer)
 
-	address := "localhost:60081"
+	address := "127.0.0.1:60081"
 	go startGRPCServer(grpcServer, address, logger)
 }
 

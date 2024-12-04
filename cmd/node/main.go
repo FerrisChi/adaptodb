@@ -21,59 +21,22 @@ import (
 
 	"github.com/lni/dragonboat/v3"
 	"github.com/lni/dragonboat/v3/config"
+	dlogger "github.com/lni/dragonboat/v3/logger"
+
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
 )
 
-type NodeConfig struct {
-	nodeID      uint64
-	address     string
-	groupID     uint64
-	dataDir     string
-	walDir      string
-	members     string
-	keyrange    string
-	ctrlAddress string
-	initialized bool
-}
-
 func main() {
-	logger := setupLogger()
-	nodeConfig := parseNodeConfigFlags(logger)
-
-	setupLogFile(nodeConfig.nodeID, logger)
-
-	handleDarwinSignal()
-
-	nodeHost := initializeNodeHost(nodeConfig, logger)
-	defer nodeHost.Stop()
-
-	startCluster(nodeHost, nodeConfig, logger)
-
-	if !nodeConfig.initialized {
-		initializeKeyRanges(nodeHost, nodeConfig, logger)
-	}
-
-	startGRPCServers(nodeHost, nodeConfig, logger)
-	startHTTPServer(nodeHost, nodeConfig, logger)
-
-	waitForShutdown(nodeHost, logger)
-}
-
-func setupLogger() struct {
-	Logf   func(format string, v ...interface{})
-	Fatalf func(format string, v ...interface{})
-} {
 	logger := utils.NamedLogger("Node Main")
-	return logger
-}
 
-// Parses node config flags that contain node information
-func parseNodeConfigFlags(logger struct {
-	Logf   func(format string, v ...interface{})
-	Fatalf func(format string, v ...interface{})
-},
-) *NodeConfig {
+	dlogger.GetLogger("dragonboat").SetLevel(dlogger.WARNING)
+	dlogger.GetLogger("rsm").SetLevel(dlogger.WARNING)
+	dlogger.GetLogger("raft").SetLevel(dlogger.WARNING)
+	dlogger.GetLogger("config").SetLevel(dlogger.WARNING)
+	dlogger.GetLogger("logdb").SetLevel(dlogger.WARNING)
+	dlogger.GetLogger("transport").SetLevel(dlogger.WARNING)
+
 	nodeID := flag.Uint64("id", 0, "NodeID to start")
 	address := flag.String("address", "", "Node address (e.g. localhost:63001)")
 	groupID := flag.Uint64("group-id", 0, "Raft group ID")
@@ -84,93 +47,49 @@ func parseNodeConfigFlags(logger struct {
 	ctrlAddress := flag.String("ctrl-address", "", "Controller address (e.g. localhost:50001)")
 	flag.Parse()
 
+	// Validate required flags
 	if *nodeID == 0 || *address == "" || *groupID == 0 {
 		flag.Usage()
-		logger.Fatalf("Missing required flags.")
+		os.Exit(1)
 	}
 
-	initialized := isNodeInitialized(*nodeID)
-
-	return &NodeConfig{
-		nodeID:      *nodeID,
-		address:     *address,
-		groupID:     *groupID,
-		dataDir:     *dataDir,
-		walDir:      *walDir,
-		members:     *members,
-		keyrange:    *keyrange,
-		ctrlAddress: *ctrlAddress,
-		initialized: initialized,
-	}
-}
-
-func isNodeInitialized(nodeID uint64) bool {
-	logFilePath := fmt.Sprintf("tmp/log/%d.log", nodeID)
-	_, err := os.Stat(logFilePath)
-	return err == nil
-}
-
-func setupLogFile(nodeID uint64, logger struct {
-	Logf   func(format string, v ...interface{})
-	Fatalf func(format string, v ...interface{})
-},
-) {
+	// Create log directory if it does not exist
 	logDir := "tmp/log"
 	if _, err := os.Stat(logDir); os.IsNotExist(err) {
 		if err := os.MkdirAll(logDir, 0755); err != nil {
-			logger.Fatalf("Failed to create log directory: %v", err)
+			log.Fatalf("failed to create log directory: %v", err)
 		}
 	}
-
-	logFile, err := os.OpenFile(fmt.Sprintf("%s/%d.log", logDir, nodeID), os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0666)
+	initialized := false
+	if _, err := os.Stat(fmt.Sprintf("tmp/log/%d.log", *nodeID)); err == nil {
+		initialized = true
+	}
+	logFile, err := os.OpenFile(fmt.Sprintf("tmp/log/%d.log", *nodeID), os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0666)
 	if err != nil {
-		logger.Fatalf("Failed to open log file: %v", err)
+		log.Fatalf("failed to open log file: %v", err)
 	}
 	log.SetOutput(logFile)
 	log.SetFlags(log.Ltime | log.Lshortfile)
-}
 
-// handleDarwinSignal addresses a macOS-specific issue: https://github.com/golang/go/issues/17393
-func handleDarwinSignal() {
 	if runtime.GOOS == "darwin" {
 		signal.Ignore(syscall.Signal(0xd))
 	}
-}
 
-func initializeNodeHost(nodeConfig *NodeConfig, logger struct {
-	Logf   func(format string, v ...interface{})
-	Fatalf func(format string, v ...interface{})
-},
-) *dragonboat.NodeHost {
-	nodeHostConfig := config.NodeHostConfig{
-		NodeHostDir:    nodeConfig.dataDir,
-		WALDir:         nodeConfig.walDir,
+	nhc := config.NodeHostConfig{
+		NodeHostDir:    *dataDir,
+		WALDir:         *walDir,
 		RTTMillisecond: 200,
-		RaftAddress:    nodeConfig.address,
+		RaftAddress:    *address,
 	}
 
-	nodeHost, err := dragonboat.NewNodeHost(nodeHostConfig)
+	nh, err := dragonboat.NewNodeHost(nhc)
 	if err != nil {
-		logger.Fatalf("Failed to create NodeHost: %v", err)
+		log.Fatalf("failed to create NodeHost: %v", err)
 	}
 
-	return nodeHost
-}
-
-func startCluster(nodeHost *dragonboat.NodeHost, nodeConfig *NodeConfig, logger struct {
-	Logf   func(format string, v ...interface{})
-	Fatalf func(format string, v ...interface{})
-},
-) {
-	membersMap, err := schema.ParseMembers(nodeConfig.members)
-	if err != nil {
-		logger.Fatalf("Failed to parse members: %v", err)
-	}
-
-	// Explicitly refer to dragonboat/config.Config
 	rc := config.Config{
-		NodeID:             nodeConfig.nodeID,
-		ClusterID:          nodeConfig.groupID,
+		NodeID:             *nodeID,
+		ClusterID:          *groupID,
 		ElectionRTT:        10,
 		HeartbeatRTT:       2,
 		CheckQuorum:        true,
@@ -178,112 +97,122 @@ func startCluster(nodeHost *dragonboat.NodeHost, nodeConfig *NodeConfig, logger 
 		CompactionOverhead: 10,
 	}
 
-	if err := nodeHost.StartCluster(membersMap, false, sm.NewKVStore, rc); err != nil {
-		logger.Fatalf("Failed to start node: %v", err)
-	}
-
-	logger.Logf("Node started: ID=%d, Address=%s, GroupID=%d", nodeConfig.nodeID, nodeConfig.address, nodeConfig.groupID)
-}
-
-func initializeKeyRanges(nodeHost *dragonboat.NodeHost, config *NodeConfig, logger struct {
-	Logf   func(format string, v ...interface{})
-	Fatalf func(format string, v ...interface{})
-},
-) {
-	logger.Logf("Waiting for raft to stabilize...")
-	time.Sleep(schema.RAFT_LAUNCH_TIMEOUT)
-
-	leader, _, err := nodeHost.GetLeaderID(config.groupID)
-	if err == nil && leader == config.nodeID {
-		keyRanges := schema.ParseKeyRanges(config.keyrange)
-		ctx, cancel := context.WithTimeout(context.Background(), schema.READ_WRITE_TIMEOUT)
-		defer cancel()
-
-		session := nodeHost.GetNoOPSession(config.groupID)
-		cmd := fmt.Sprintf("apply_schedule:init,%s", schema.KeyRangeToString(keyRanges))
-		if _, err := nodeHost.SyncPropose(ctx, session, []byte(cmd)); err != nil {
-			logger.Fatalf("Failed to propose initial key ranges: %v", err)
-		}
-
-		logger.Logf("Proposed initial key ranges: %s", keyRanges)
-	}
-}
-
-func startGRPCServers(nh *dragonboat.NodeHost, nodeConfig *NodeConfig, logger struct {
-	Logf   func(format string, v ...interface{})
-	Fatalf func(format string, v ...interface{})
-},
-) {
-	membersMap, err := schema.ParseMembers(nodeConfig.members)
+	// Parse members string into map
+	membersMap, err := schema.ParseMembers(*members)
 	if err != nil {
-		logger.Fatalf("Failed to parse members: %v", err)
+		log.Fatalf("failed to parse members: %v", err)
 	}
-	statsServer := NewNodeStatsServer(nh, nodeConfig.groupID)
-	startGRPCServer(fmt.Sprintf("localhost:%d", 53000+nodeConfig.nodeID), pb.NodeStatsServer(statsServer), pb.RegisterNodeStatsServer, logger)
 
-	router := NewRouter(nh, nodeConfig.nodeID, nodeConfig.groupID, membersMap, nodeConfig.ctrlAddress, statsServer)
-	startGRPCServer(fmt.Sprintf("localhost:%d", 51000+nodeConfig.nodeID), pb.NodeRouterServer(router), pb.RegisterNodeRouterServer, logger)
-}
+	if err := nh.StartCluster(membersMap, false, sm.NewKVStore, rc); err != nil {
+		log.Fatalf("failed to start node: %v", err)
+	}
 
-func startGRPCServer[T any](address string, server T, registerFunc func(grpc.ServiceRegistrar, T), logger struct {
-	Logf   func(format string, v ...interface{})
-	Fatalf func(format string, v ...interface{})
-},
-) {
-	grpcServer := grpc.NewServer()
-	registerFunc(grpcServer, server)
-	reflection.Register(grpcServer)
+	logger.Logf("Started node with the following configuration:")
+
+	logger.Logf("NodeID: %d", *nodeID)
+	logger.Logf("Address: %s", *address)
+	logger.Logf("GroupID: %d", *groupID)
+	logger.Logf("DataDir: %s", *dataDir)
+	logger.Logf("WALDir: %s", *walDir)
+	logger.Logf("Members: %s", *members)
+	logger.Logf("KeyRange: %s", *keyrange)
+
+	// If not initialized, wait for all nodes and propose initial key ranges
+	if !initialized {
+		log.Println("Waiting for raft stabilize...")
+		time.Sleep(schema.RAFT_LAUNCH_TIMEOUT)
+		leader, _, err := nh.GetLeaderID(*groupID)
+		if err == nil && leader == *nodeID {
+			keyRanges := schema.ParseKeyRanges(*keyrange)
+			ctx, cancel := context.WithTimeout(context.Background(), schema.READ_WRITE_TIMEOUT)
+			defer cancel()
+			session := nh.GetNoOPSession(*groupID)
+			cmd := fmt.Sprintf("apply_schedule:init,%s", schema.KeyRangeToString(keyRanges))
+			_, err := nh.SyncPropose(ctx, session, []byte(cmd))
+			if err != nil {
+				log.Fatalf("Failed to propose initial key ranges. PLEASE DELETE TMP DIR. %v", err)
+			} else {
+				log.Println("Proposed initial key ranges: ", keyRanges)
+			}
+		}
+	}
+
+	// Initialize NodeStatsServer
+	statsServer := NewNodeStatsServer(nh, *groupID)
+
+	// Start gRPC server for stats
+	statsGrpcServer := grpc.NewServer()
+	pb.RegisterNodeStatsServer(statsGrpcServer, statsServer)
+	reflection.Register(statsGrpcServer)
+
+	statsGrpcAddress := fmt.Sprintf("localhost:%d", 53000+*nodeID)
+	lis, err := net.Listen("tcp", statsGrpcAddress)
+	if err != nil {
+		log.Fatalf("failed to listen on port %s: %v", statsGrpcAddress, err)
+	}
+	logger.Logf("Listening on %s", statsGrpcAddress)
 
 	go func() {
-		lis, err := net.Listen("tcp", address)
-		if err != nil {
-			logger.Fatalf("Failed to listen on %s: %v", address, err)
-		}
-		logger.Logf("gRPC server listening on %s", address)
-
-		if err := grpcServer.Serve(lis); err != nil {
-			logger.Fatalf("Failed to serve: %v", err)
+		if err := statsGrpcServer.Serve(lis); err != nil {
+			log.Fatalf("failed to serve: %v", err)
 		}
 	}()
-}
 
-func startHTTPServer(nh *dragonboat.NodeHost, nodeConfig *NodeConfig, logger struct {
-	Logf   func(format string, v ...interface{})
-	Fatalf func(format string, v ...interface{})
-},
-) {
-	membersMap, err := schema.ParseMembers(nodeConfig.members)
+	// start grpc server for client communication
+	router := NewRouter(nh, *nodeID, *groupID, membersMap, *ctrlAddress, statsServer)
+	nodeGrpcServer := grpc.NewServer()
+	pb.RegisterNodeRouterServer(nodeGrpcServer, router)
+	reflection.Register(nodeGrpcServer)
+
+	nodeGrpcAddress := fmt.Sprintf("localhost:%d", 51000+*nodeID)
+	lis, err = net.Listen("tcp", nodeGrpcAddress)
 	if err != nil {
-		logger.Fatalf("Failed to parse members: %v", err)
+		log.Fatalf("failed to listen on port %s: %v", nodeGrpcAddress, err)
 	}
-	router := NewRouter(nh, nodeConfig.nodeID, nodeConfig.groupID, membersMap, nodeConfig.ctrlAddress, nil)
+	logger.Logf("Listening on %s", nodeGrpcAddress)
 
+	go func() {
+		if err := nodeGrpcServer.Serve(lis); err != nil {
+			log.Fatalf("failed to serve: %v", err)
+		}
+	}()
+
+	nodeHttpAddress := fmt.Sprintf("localhost:%d", 52000+*nodeID)
+
+	// Create HTTP server for WebSocket connections
 	httpServer := &http.Server{
-		Addr: fmt.Sprintf("localhost:%d", 52000+nodeConfig.nodeID),
+		Addr: nodeHttpAddress,
 	}
 
+	// Setup WebSocket handler
 	http.HandleFunc("/transfer", router.HandleTransfer)
 	http.HandleFunc("/read", router.HandleRead)
 	http.HandleFunc("/write", router.HandleWrite)
 
+	// Start HTTP server in goroutine
 	go func() {
-		logger.Logf("Starting HTTP server on %s", httpServer.Addr)
-		if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		logger.Logf("Starting HTTP server on %s", nodeHttpAddress)
+		if err := httpServer.ListenAndServe(); err != http.ErrServerClosed {
 			logger.Fatalf("HTTP server error: %v", err)
 		}
 	}()
-}
 
-func waitForShutdown(nh *dragonboat.NodeHost, logger struct {
-	Logf   func(format string, v ...interface{})
-	Fatalf func(format string, v ...interface{})
-},
-) {
+	// Handle shutdown
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, syscall.SIGTERM)
 	<-sig
 
-	logger.Logf("Shutting down node...")
+	// Graceful shutdown
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	// Stop all servers
+	nodeGrpcServer.GracefulStop()
+	if err := httpServer.Shutdown(ctx); err != nil {
+		logger.Logf("HTTP server shutdown error: %v", err)
+	}
 	nh.Stop()
+	nodeGrpcServer.Stop()
+	statsGrpcServer.Stop()
 	logger.Logf("Node stopped")
 }

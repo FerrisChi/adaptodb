@@ -75,7 +75,7 @@ func (a *DefaultAnalyzer) detectImbalanceShards(loads []*NodeMetrics) ([]uint64,
 func queryNodeStats(nodeAddress string) (*NodeMetrics, error) {
 	conn, err := grpc.NewClient(nodeAddress, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
-		log.Fatalf("Failed to connect to gRPC server: %v", err)
+		log.Printf("Failed to connect to gRPC server: %v", err)
 		return nil, err
 	}
 	defer conn.Close()
@@ -86,7 +86,7 @@ func queryNodeStats(nodeAddress string) (*NodeMetrics, error) {
 
 	resp, err := client.GetStats(ctx, &pb.GetStatsRequest{})
 	if err != nil {
-		log.Fatalf("Failed to get stats: %v", err)
+		log.Printf("Failed to get stats: %v", err)
 		return nil, err
 	}
 

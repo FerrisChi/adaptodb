@@ -4,12 +4,13 @@ import (
 	pb "adaptodb/pkg/proto/proto"
 	"adaptodb/pkg/schema"
 	"context"
+	"encoding/csv"
 	"fmt"
 	"log"
 	"math"
 	"math/rand"
 	"os"
-	"os/signal"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -51,9 +52,11 @@ type Metrics struct {
 }
 
 const (
-	keyCharset   = "abcdefghijklmnopqrstuvwxyz"
-	valueCharset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-	READ_RATIO   = 0.75
+	keyCharset    = "abcdefghijklmnopqrstuvwxyz"
+	valueCharset  = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+	WRITE_TIME    = 60
+	INTERVAL_TIME = 5
+	NUM_WORKERS   = 16
 )
 
 func generateKey() string {
@@ -66,7 +69,12 @@ func generateKey() string {
 }
 
 func generateValue() string {
-	length := int(math.Floor(math.Exp(rand.Float64() * math.Log(1000))))
+	// length := int(math.Floor(math.Exp(rand.Float64() * math.Log(1000))))
+	// length := 32
+	length := 4096
+	// length := 8192
+	// length := 32768
+	// length := 524288
 	b := make([]byte, length)
 	for i := range b {
 		b[i] = valueCharset[rand.Intn(len(valueCharset))]
@@ -198,57 +206,117 @@ func worker(id int, meta *Metadata, metrics *Metrics, wg *sync.WaitGroup, stopCh
 	defer wg.Done()
 
 	var testKeys []string
-	for i := 0; i < 100; i++ {
-		key := generateKey()
-		value := generateValue()
-		status, err := write(key, value, meta)
-		if err != nil || status == 0 {
-			atomic.AddUint64(&metrics.failedWrites, 1)
-			// log.Printf("Worker %d: Write error: %v", id, err)
-			continue
+	// for i := 0; i < 10; i++ {
+	// 	key := generateKey()
+	// 	value := generateValue()
+	// 	status, err := write(key, value, meta)
+	// 	if err != nil || status == 0 {
+	// 		atomic.AddUint64(&metrics.failedWrites, 1)
+	// 		// log.Printf("Worker %d: Write error: %v", id, err)
+	// 		continue
+	// 	}
+	// 	atomic.AddUint64(&metrics.successfulWrites, 1)
+	// 	testKeys = append(testKeys, key)
+	// }
+
+	stopWriteCh := make(chan struct{})
+	go func() {
+		time.Sleep(WRITE_TIME * time.Second)
+		close(stopWriteCh)
+	}()
+
+writeLoop:
+	for {
+		select {
+		case <-stopWriteCh:
+			break writeLoop
+		default:
+			key := generateKey()
+			value := generateValue()
+			status, err := write(key, value, meta)
+			if err != nil || status != 1 {
+				atomic.AddUint64(&metrics.failedWrites, 1)
+				// log.Printf("Worker %d: Write error: %v", id, err)
+				continue
+			}
+			atomic.AddUint64(&metrics.successfulWrites, 1)
+			testKeys = append(testKeys, key)
 		}
-		atomic.AddUint64(&metrics.successfulWrites, 1)
-		testKeys = append(testKeys, key)
 	}
+
+	time.Sleep(INTERVAL_TIME * time.Second)
 
 	for {
 		select {
 		case <-stopCh:
 			return
 		default:
-			if rand.Float64() < READ_RATIO { // 75% reads
-				key := testKeys[rand.Intn(len(testKeys))]
-				status, err := read(key, meta)
-				if err != nil || status == 0 {
-					atomic.AddUint64(&metrics.failedReads, 1)
-					// log.Printf("Worker %d: Read error: %v", id, err)
-					continue
-				}
-				atomic.AddUint64(&metrics.successfulReads, 1)
-			} else { // 25% writes
-				var key string
-				if len(testKeys) < 100 || rand.Float64() < 0.2 {
-					key = generateKey()
-				} else {
-					key = testKeys[rand.Intn(len(testKeys))]
-				}
-				value := generateValue()
-				status, err := write(key, value, meta)
-				if err != nil || status != 1 {
-					atomic.AddUint64(&metrics.failedWrites, 1)
-					// log.Printf("Worker %d: Write error: %v", id, err)
-					continue
-				}
-				atomic.AddUint64(&metrics.successfulWrites, 1)
-				testKeys = append(testKeys, key)
+			key := testKeys[rand.Intn(len(testKeys))]
+			status, err := read(key, meta)
+			if err != nil || status == 0 {
+				atomic.AddUint64(&metrics.failedReads, 1)
+				// log.Printf("Worker %d: Read error: %v", id, err)
+				continue
 			}
+			atomic.AddUint64(&metrics.successfulReads, 1)
 		}
 	}
 }
 
+type MetricsRecord struct {
+	timestamp        time.Time
+	successfulReads  uint64
+	failedReads      uint64
+	successfulWrites uint64
+	failedWrites     uint64
+	readSuccessRate  float64
+	writeSuccessRate float64
+	totalOps         uint64
+}
+
+func writeMetricsToFile(record MetricsRecord, writer *csv.Writer) error {
+	row := []string{
+		record.timestamp.Format(time.RFC3339),
+		strconv.FormatUint(record.successfulReads, 10),
+		strconv.FormatUint(record.failedReads, 10),
+		strconv.FormatUint(record.successfulWrites, 10),
+		strconv.FormatUint(record.failedWrites, 10),
+		strconv.FormatFloat(record.readSuccessRate, 'f', 2, 64),
+		strconv.FormatFloat(record.writeSuccessRate, 'f', 2, 64),
+		strconv.FormatUint(record.totalOps, 10),
+	}
+	return writer.Write(row)
+}
+
 func createMetricsReporter(metrics *Metrics, stopCh chan struct{}) {
+	// Open metrics file
+	file, err := os.OpenFile("metrics.csv", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if err != nil {
+		log.Fatal("Failed to open metrics file:", err)
+	}
+
+	writer := csv.NewWriter(file)
+
+	// Write header
+	header := []string{
+		"Timestamp",
+		"Successful Reads",
+		"Failed Reads",
+		"Successful Writes",
+		"Failed Writes",
+		"Read Success Rate (%)",
+		"Write Success Rate (%)",
+		"Total Operations",
+	}
+	if err := writer.Write(header); err != nil {
+		log.Fatal("Failed to write header:", err)
+	}
+
 	ticker := time.NewTicker(1 * time.Second)
 	go func() {
+		defer file.Close()
+		defer writer.Flush()
+
 		for {
 			select {
 			case <-ticker.C:
@@ -259,6 +327,7 @@ func createMetricsReporter(metrics *Metrics, stopCh chan struct{}) {
 
 				totalReads := reads + readFails
 				totalWrites := writes + writeFails
+				totalOps := totalReads + totalWrites
 
 				var readSuccessRate, writeSuccessRate float64
 				if totalReads > 0 {
@@ -268,13 +337,33 @@ func createMetricsReporter(metrics *Metrics, stopCh chan struct{}) {
 					writeSuccessRate = float64(writes) / float64(totalWrites) * 100
 				}
 
+				// Create metrics record
+				record := MetricsRecord{
+					timestamp:        time.Now(),
+					successfulReads:  reads,
+					failedReads:      readFails,
+					successfulWrites: writes,
+					failedWrites:     writeFails,
+					readSuccessRate:  readSuccessRate,
+					writeSuccessRate: writeSuccessRate,
+					totalOps:         totalOps,
+				}
+
+				// Write to file
+				if err := writeMetricsToFile(record, writer); err != nil {
+					log.Printf("Failed to write metrics: %v", err)
+				}
+				writer.Flush()
+
+				// Print to console as before
 				fmt.Printf("=== Metrics Report ===\n")
 				fmt.Printf("Reads - Success: %d, Failed: %d, Success Rate: %.2f%%\n",
 					reads, readFails, readSuccessRate)
 				fmt.Printf("Writes - Success: %d, Failed: %d, Success Rate: %.2f%%\n",
 					writes, writeFails, writeSuccessRate)
-				fmt.Printf("Total Ops: %d\n", totalReads+totalWrites)
+				fmt.Printf("Total Ops: %d\n", totalOps)
 				fmt.Println("==================")
+
 			case <-stopCh:
 				ticker.Stop()
 				return
@@ -290,7 +379,7 @@ func main() {
 	// Start metrics reporter
 	createMetricsReporter(metrics, stopCh)
 
-	meta := NewMetadata("localhost:60081")
+	meta := NewMetadata("127.0.0.1:60081")
 
 	defer meta.cleanUp()
 
@@ -301,12 +390,11 @@ func main() {
 	// Start workers with metrics
 	log.Println("Starting workers...")
 	var wg sync.WaitGroup
-	numWorkers := 100
-	for i := 0; i < numWorkers; i++ {
+	for i := 0; i < NUM_WORKERS; i++ {
 		wg.Add(1)
 		go worker(i, meta, metrics, &wg, stopCh)
 	}
-	log.Println(numWorkers, "Workers started")
+	log.Println(NUM_WORKERS, "Workers started")
 
 	go func(stopCh chan struct{}) {
 		ticker := time.NewTicker(10 * time.Second)
@@ -325,7 +413,11 @@ func main() {
 
 	// Handle interrupt signal
 	sigCh := make(chan os.Signal, 1)
-	signal.Notify(sigCh, os.Interrupt)
+	go func() {
+		time.Sleep((WRITE_TIME*2 + INTERVAL_TIME) * time.Second)
+		sigCh <- os.Interrupt
+	}()
+	// signal.Notify(sigCh, os.Interrupt)
 
 	<-sigCh
 	log.Println("Stopping workers...")
