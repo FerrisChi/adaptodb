@@ -100,7 +100,9 @@ func (ms *Metadata) GetShardForKey(key string) (uint64, error) {
 func (ms *Metadata) GetShardKeyRanges(shardID uint64) []schema.KeyRange {
 	for _, shard := range ms.Config.RaftGroups {
 		if shard.ShardID == shardID {
-			return shard.KeyRanges
+			ranges := make([]schema.KeyRange, len(shard.KeyRanges))
+			copy(ranges, shard.KeyRanges)
+			return ranges
 		}
 	}
 	return nil

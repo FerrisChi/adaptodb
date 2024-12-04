@@ -10,9 +10,11 @@ import (
 	"math"
 	"math/rand"
 	"os"
+	"os/exec"
 	"strconv"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 
 	"google.golang.org/grpc"
@@ -56,7 +58,13 @@ const (
 	valueCharset  = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 	WRITE_TIME    = 60
 	INTERVAL_TIME = 5
-	NUM_WORKERS   = 16
+	NUM_WORKERS   = 512
+	LENGTH        = 4096
+	// length := 32
+	// length := 4096
+	// length := 8192
+	// length := 32768
+	// length := 524288
 )
 
 func generateKey() string {
@@ -70,12 +78,8 @@ func generateKey() string {
 
 func generateValue() string {
 	// length := int(math.Floor(math.Exp(rand.Float64() * math.Log(1000))))
-	// length := 32
-	length := 4096
-	// length := 8192
-	// length := 32768
-	// length := 524288
-	b := make([]byte, length)
+
+	b := make([]byte, LENGTH)
 	for i := range b {
 		b[i] = valueCharset[rand.Intn(len(valueCharset))]
 	}
@@ -373,6 +377,30 @@ func createMetricsReporter(metrics *Metrics, stopCh chan struct{}) {
 }
 
 func main() {
+
+	// Remove the tmp directory if it exists
+	if err := os.RemoveAll("tmp"); err != nil {
+		log.Fatalf("Failed to remove tmp directory: %v", err)
+	}
+	cmd := exec.Command("./kill-ports.sh")
+	if err := cmd.Run(); err != nil {
+		log.Fatalf("Failed to kill AdaptoDB: %v", err)
+	}
+
+	// Start the AdaptoDB server
+	cmd = exec.Command("./bin/release/adaptodb")
+	if err := cmd.Start(); err != nil {
+		log.Fatalf("Failed to start AdaptoDB: %v", err)
+	}
+	defer func() {
+		cmd.Process.Signal(syscall.SIGINT)
+		cmd.Wait()
+	}()
+
+	fmt.Print("Waiting for AdaptoDB init\n")
+
+	time.Sleep(schema.ADAPTODB_LAUNCH_TIMEOUT) // Wait for the server to start
+
 	metrics := &Metrics{}
 	stopCh := make(chan struct{})
 
