@@ -35,6 +35,7 @@ type BalanceAdvice struct {
 type Schedule struct {
 	ShardID   uint64
 	KeyRanges []KeyRange
+	FailedNodes []uint64
 }
 
 type ConfigResponse struct {

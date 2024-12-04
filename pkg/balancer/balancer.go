@@ -61,7 +61,7 @@ func NewBalancer(address string, analyzer Analyzer) (*Balancer, error) {
 }
 
 func (b *Balancer) StartMonitoring() {
-	ticker := time.NewTicker(30000 * time.Second)
+	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
 
 	for {

@@ -139,3 +139,5 @@ func formatMembers(members map[uint64]string) string {
 	}
 	return result
 }
+
+func StartNode()

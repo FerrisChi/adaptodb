@@ -116,7 +116,7 @@ func main() {
 	metadata.UpdateKeyRangeFromNode()
 
 	// Initialize Shard Controller and gRPC server
-	controller := controller.NewController(metadata)
+	controller := controller.NewController(&launcher, metadata)
 
 	controllerGrpcServer := grpc.NewServer()
 	pb.RegisterControllerServer(controllerGrpcServer, controller)

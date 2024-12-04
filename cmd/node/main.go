@@ -14,6 +14,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/pkg/profile"
+
 	pb "adaptodb/pkg/proto/proto"
 	"adaptodb/pkg/schema"
 	"adaptodb/pkg/sm"
@@ -34,6 +36,53 @@ func main() {
 	keyrange := flag.String("keyrange", "", "Key range managed by this node (format: start-end)")
 	ctrlAddress := flag.String("ctrl-address", "", "Controller address (e.g. localhost:50001)")
 	flag.Parse()
+
+	// Profiling
+	// Create profiling directory and files
+	profDir := fmt.Sprintf("tmp/prof/%d", *nodeID)
+	if err := os.MkdirAll(profDir, 0755); err != nil {
+		log.Fatal(err)
+	}
+
+	defer profile.Start(profile.ProfilePath(profDir)).Stop()
+
+	// p := profile.Start(profile.MutexProfile, profile.ProfilePath(profDir), profile.NoShutdownHook)
+	// defer p.Stop()
+
+	// cpuFile, err := os.OpenFile(
+	// 	fmt.Sprintf("%s/cpu.prof", profDir),
+	// 	os.O_CREATE|os.O_WRONLY|os.O_TRUNC,
+	// 	0644,
+	// )
+	// if err != nil {
+	// 	log.Fatal(err)
+	// }
+
+	// if err := pprof.StartCPUProfile(cpuFile); err != nil {
+	// 	log.Fatal(err)
+	// }
+
+	// // Memory Profile
+	// memFile, err := os.OpenFile(
+	// 	fmt.Sprintf("%s/mem.prof", profDir),
+	// 	os.O_CREATE|os.O_WRONLY|os.O_TRUNC,
+	// 	0644,
+	// )
+	// if err != nil {
+	// 	log.Fatal(err)
+	// }
+
+	// mutexFile, err := os.OpenFile(
+	// 	fmt.Sprintf("%s/mutex.prof", profDir),
+	// 	os.O_CREATE|os.O_WRONLY|os.O_TRUNC,
+	// 	0644,
+	// )
+	// if err != nil {
+	// 	log.Fatal(err)
+	// }
+	// // Enable mutex profiling
+	// runtime.SetMutexProfileFraction(1) // 1 means profile all lock events
+
 
 	// Validate required flags
 	if *nodeID == 0 || *address == "" || *groupID == 0 {
@@ -202,4 +251,19 @@ func main() {
 	nodeGrpcServer.Stop()
 	statsGrpcServer.Stop()
 	log.Println("Node stopped")
+
+	// runtime.GC() // get up-to-date statistics
+	// if err := pprof.WriteHeapProfile(memFile); err != nil {
+	// 	log.Fatal(err)
+	// }
+	// memFile.Close()
+
+	// pprof.StopCPUProfile()
+	// cpuFile.Close()
+
+	// // In shutdown sequence before exit:
+	// if mp := pprof.Lookup("mutex"); mp != nil {
+	// 	mp.WriteTo(mutexFile, 0)
+	// }
+	// mutexFile.Close()
 }

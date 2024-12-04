@@ -47,6 +47,20 @@ func (a *DefaultAnalyzer) AnalyzeLoads() ([]schema.Schedule, bool) {
 
 	// 3. create new schedules
 	newSchedules, err := a.createShardSchedules(imbalancedShards, loads, a.strategy)
+	
+	// 4. mark failed nodes
+	failureInfo := schema.Schedule{}
+	for _, load := range loads {
+		if load.NumEntries < 0 {
+			// mark the node as failed
+			failureInfo.FailedNodes = append(failureInfo.FailedNodes, load.NodeID)
+		}
+	}
+	if len(failureInfo.FailedNodes) > 0 {
+		newSchedules = append(newSchedules, failureInfo)
+		log.Println("Detected failed nodes: ", failureInfo.FailedNodes)
+	}
+
 	if err != nil {
 		log.Printf("Failed to create new schedules: %v", err)
 		return []schema.Schedule{}, false
