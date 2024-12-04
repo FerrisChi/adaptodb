@@ -2,6 +2,7 @@ package balancer
 
 import (
 	"adaptodb/pkg/schema"
+	"reflect"
 	"testing"
 )
 
@@ -130,6 +131,102 @@ func TestFindLexographicalMidpoint(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestSortByLoad(t *testing.T) {
+	tests := []struct {
+		name     string
+		loads    []*NodeMetrics
+		shardIDs []uint64
+		expected []*NodeMetrics
+	}{
+		{
+			name: "Basic Sorting",
+			loads: []*NodeMetrics{
+				{ShardID: 1, NumEntries: 50},
+				{ShardID: 2, NumEntries: 20},
+				{ShardID: 3, NumEntries: 30},
+			},
+			shardIDs: []uint64{1, 2, 3},
+			expected: []*NodeMetrics{
+				{ShardID: 2, NumEntries: 20},
+				{ShardID: 3, NumEntries: 30},
+				{ShardID: 1, NumEntries: 50},
+			},
+		},
+		{
+			name: "Subset of Shards",
+			loads: []*NodeMetrics{
+				{ShardID: 1, NumEntries: 50},
+				{ShardID: 2, NumEntries: 20},
+				{ShardID: 3, NumEntries: 30},
+			},
+			shardIDs: []uint64{3, 1},
+			expected: []*NodeMetrics{
+				{ShardID: 3, NumEntries: 30},
+				{ShardID: 1, NumEntries: 50},
+			},
+		},
+		{
+			name:     "Empty Loads",
+			loads:    []*NodeMetrics{},
+			shardIDs: []uint64{1, 2},
+			expected: []*NodeMetrics{},
+		},
+		{
+			name: "Empty ShardIDs",
+			loads: []*NodeMetrics{
+				{ShardID: 1, NumEntries: 50},
+				{ShardID: 2, NumEntries: 20},
+			},
+			shardIDs: []uint64{},
+			expected: []*NodeMetrics{},
+		},
+		{
+			name: "ShardIDs Not in Loads",
+			loads: []*NodeMetrics{
+				{ShardID: 1, NumEntries: 50},
+				{ShardID: 2, NumEntries: 20},
+			},
+			shardIDs: []uint64{3},
+			expected: []*NodeMetrics{},
+		},
+		{
+			name: "Duplicate ShardIDs",
+			loads: []*NodeMetrics{
+				{ShardID: 1, NumEntries: 50},
+				{ShardID: 2, NumEntries: 20},
+				{ShardID: 3, NumEntries: 30},
+			},
+			shardIDs: []uint64{1, 2, 1},
+			expected: []*NodeMetrics{
+				{ShardID: 2, NumEntries: 20},
+				{ShardID: 1, NumEntries: 50},
+				{ShardID: 1, NumEntries: 50},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := sortByLoad(tt.loads, tt.shardIDs)
+
+			// Normalize slices for comparison
+			got = normalizeSlice(got)
+			expected := normalizeSlice(tt.expected)
+
+			if !reflect.DeepEqual(got, expected) {
+				t.Errorf("sortByLoad() got %v, expected %v", got, expected)
+			}
+		})
+	}
+}
+
+func normalizeSlice(slice []*NodeMetrics) []*NodeMetrics {
+	if slice == nil {
+		return []*NodeMetrics{}
+	}
+	return slice
 }
 
 // Helper: Compare key ranges

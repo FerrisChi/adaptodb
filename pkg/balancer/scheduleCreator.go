@@ -32,17 +32,24 @@ func BalanceStringKeyRangesByMidpoint(
 	}
 
 	// Sort the imbalanced shards by their load (ascending)
-	sortedShards := sortByLoad(loads, imbalancedShards)
+	shardIds := extractShardIDs(loads)
+	sortedShards := sortByLoad(loads, shardIds)
+	leastLoadedShard := sortedShards[0] // The least loaded shard
+
+	if mostLoadedShard.ShardID == leastLoadedShard.ShardID {
+		log.Printf("Most loaded shard %d and least loaded shard %d have the same number of entries", mostLoadedShard.ShardID, leastLoadedShard.ShardID)
+		return nil
+	}
 
 	// Split all key ranges for the mostLoadedShard and redistribute to leastLoadedShard
 	mostLoadedRanges := keyRanges[mostLoadedShard.ShardID]
+
 	for i := range mostLoadedRanges {
 		// Find a lexographical midpoint
 		mid := findLexographicalMidpoint(mostLoadedRanges[i].Start, mostLoadedRanges[i].End)
 
 		// Assign upper half to another shard
 		if len(sortedShards) > 1 {
-			leastLoadedShard := sortedShards[0] // The least loaded shard
 			keyRanges[leastLoadedShard.ShardID] = append(keyRanges[leastLoadedShard.ShardID], schema.KeyRange{
 				Start: mostLoadedRanges[i].Start,
 				End:   mid,
@@ -53,13 +60,23 @@ func BalanceStringKeyRangesByMidpoint(
 		}
 	}
 
+	schedules = append(schedules, schema.Schedule{
+		ShardID:   mostLoadedShard.ShardID,
+		KeyRanges: mostLoadedRanges,
+	})
+
+	schedules = append(schedules, schema.Schedule{
+		ShardID:   leastLoadedShard.ShardID,
+		KeyRanges: keyRanges[leastLoadedShard.ShardID],
+	})
+
 	// Update schedules with new assignments
-	for shardID, ranges := range keyRanges {
-		schedules = append(schedules, schema.Schedule{
-			ShardID:   shardID,
-			KeyRanges: ranges,
-		})
-	}
+	// for shardID, ranges := range keyRanges {
+	// 	schedules = append(schedules, schema.Schedule{
+	// 		ShardID:   shardID,
+	// 		KeyRanges: ranges,
+	// 	})
+	// }
 
 	return schedules
 }
@@ -162,4 +179,12 @@ func contains(slice []uint64, value uint64) bool {
 		}
 	}
 	return false
+}
+
+func extractShardIDs(loads []*NodeMetrics) []uint64 {
+	var shardIDs []uint64
+	for _, load := range loads {
+		shardIDs = append(shardIDs, load.ShardID)
+	}
+	return shardIDs
 }

@@ -6,12 +6,12 @@ import (
 	"sort"
 )
 
-// This method detects shards whose load is significantly higher relative
+// This method detects shards whose load is significantly higher relative (precisely higher by "threshold" factor)
 // to the least-loaded shard.
 func DetectRelativeImbalance(loads []*NodeMetrics, threshold float64) []uint64 {
 	var imbalancedShards []uint64
 
-	if checkForSameNumberOfEntries(loads) == true {
+	if checkForSameNumberOfEntries(loads) {
 		// Return empty list if same number of entries across all entries
 		return imbalancedShards
 	}
@@ -23,11 +23,15 @@ func DetectRelativeImbalance(loads []*NodeMetrics, threshold float64) []uint64 {
 			leastLoaded = load.NumEntries
 		}
 	}
-	log.Printf("leastLoaded: %v", leastLoaded)
 
 	// Identify shards exceeding the threshold
 	for _, load := range loads {
-		if load.NumEntries >= 0 && float64(load.NumEntries)/float64(leastLoaded) > threshold {
+		loadRatio := float64(load.NumEntries) / float64(leastLoaded)
+		if leastLoaded == 0 {
+			loadRatio = float64(load.NumEntries)
+		}
+		log.Printf("%f > threshold: %f", loadRatio, threshold)
+		if load.NumEntries >= 0 && loadRatio > threshold {
 			imbalancedShards = append(imbalancedShards, load.ShardID)
 		}
 	}

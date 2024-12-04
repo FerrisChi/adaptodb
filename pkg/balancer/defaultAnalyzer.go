@@ -47,7 +47,8 @@ func (a *DefaultAnalyzer) AnalyzeLoads() ([]schema.Schedule, bool) {
 	// }
 
 	// 2. detect imbalances
-	imbalancedShards := DetectRelativeImbalance(loads, 0.25)
+	imbalancedShards := DetectRelativeImbalance(loads, 10)
+	logger.Logf("ImbalancedShards: %v", imbalancedShards)
 	if len(imbalancedShards) == 0 {
 		return []schema.Schedule{}, false
 	}
@@ -60,24 +61,7 @@ func (a *DefaultAnalyzer) AnalyzeLoads() ([]schema.Schedule, bool) {
 	}
 
 	return newSchedules, len(newSchedules) > 0
-}
-
-func (a *DefaultAnalyzer) detectImbalanceShards(loads []*NodeMetrics) ([]uint64, error) {
-	// TODO: This is dummy code, REPLACE
-	var imbalancedShards []uint64
-	avgEntries := 0.0
-	for _, load := range loads {
-		avgEntries += float64(load.NumEntries)
-	}
-	avgEntries /= float64(len(loads))
-
-	// If a shard is responsible for more than twice the average number of entries, it is considered imbalanced
-	for idx, load := range loads {
-		if float64(load.NumEntries) > avgEntries*2 {
-			imbalancedShards = append(imbalancedShards, uint64(idx))
-		}
-	}
-	return imbalancedShards, nil
+	// return []schema.Schedule{}, false
 }
 
 func queryNodeStats(nodeAddress string) (*NodeMetrics, error) {
@@ -127,9 +111,7 @@ func (a *DefaultAnalyzer) collectMetrics() ([]*NodeMetrics, error) {
 				})
 			} else {
 				logger.Logf("Node %d in Shard %d has %d entries:", member.ID, shard.ShardID, res.NumEntries)
-				logger.Logf("Successful Requests: ", res.NumSuccessfulRequets)
-				logger.Logf("Failed Requests: ", res.NumFailedRequests)
-				logger.Logf("Last Reset Time: ", res.LastResetTime)
+				logger.Logf("Successful Requests: %d, Failed Requests, %d, Last Reset Time: %d", res.NumSuccessfulRequets, res.NumFailedRequests, res.LastResetTime)
 				res.ShardID = shard.ShardID
 				res.NodeID = member.ID
 				ret = append(ret, res)
@@ -145,7 +127,7 @@ func (a *DefaultAnalyzer) createShardSchedules(loads []*NodeMetrics, imbalancedS
 	logger := utils.NamedLogger("DefaultAnalyzer")
 	allShardKeyRanges := make(map[uint64][]schema.KeyRange)
 
-	for _, idx := range imbalancedShards {
+	for idx := range loads {
 		// Get the shard ID
 		shardID := loads[idx].ShardID
 
@@ -158,6 +140,8 @@ func (a *DefaultAnalyzer) createShardSchedules(loads []*NodeMetrics, imbalancedS
 		// Populate the map with key ranges
 		allShardKeyRanges[shardID] = shardKeyRanges
 	}
+	logger.Logf("Current Key Ranges: %v", allShardKeyRanges)
+
 	recommendedSchedules := BalanceStringKeyRangesByMidpoint(loads, imbalancedShards, allShardKeyRanges)
 
 	if recommendedSchedules == nil {
