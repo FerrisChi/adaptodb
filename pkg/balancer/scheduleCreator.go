@@ -13,8 +13,8 @@ func BalanceStringKeyRangesByMidpoint(
 	imbalancedShards []uint64,
 	keyRanges map[uint64][]schema.KeyRange,
 ) []schema.Schedule {
-	log.Printf("imbalancedShards: %v", imbalancedShards)
 	var schedules []schema.Schedule
+	var keyRangesToAppend []schema.KeyRange
 
 	// Find the most loaded shard
 	var mostLoadedShard *NodeMetrics
@@ -55,28 +55,20 @@ func BalanceStringKeyRangesByMidpoint(
 				End:   mid,
 			})
 
+			keyRangesToAppend = append(keyRangesToAppend, schema.KeyRange{
+				Start: mostLoadedRanges[i].Start,
+				End:   mid,
+			})
+
 			// Adjust the remaining range for the most loaded shard
 			mostLoadedRanges[i].Start = mid
 		}
 	}
 
 	schedules = append(schedules, schema.Schedule{
-		ShardID:   mostLoadedShard.ShardID,
-		KeyRanges: mostLoadedRanges,
-	})
-
-	schedules = append(schedules, schema.Schedule{
 		ShardID:   leastLoadedShard.ShardID,
-		KeyRanges: keyRanges[leastLoadedShard.ShardID],
+		KeyRanges: keyRangesToAppend,
 	})
-
-	// Update schedules with new assignments
-	// for shardID, ranges := range keyRanges {
-	// 	schedules = append(schedules, schema.Schedule{
-	// 		ShardID:   shardID,
-	// 		KeyRanges: ranges,
-	// 	})
-	// }
 
 	return schedules
 }
