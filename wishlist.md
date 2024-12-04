@@ -12,7 +12,7 @@
 - [ ] Launch remote nodes
 
 ## Migration
-- [ ] Add CancelMigration logic
+- [x] Add CancelMigration logic
 - [ ] Handle node failure
 
 ## Load balance

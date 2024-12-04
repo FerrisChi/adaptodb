@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"strings"
 	"syscall"
 	"time"
 
@@ -17,6 +18,15 @@ import (
 )
 
 func test() error {
+
+	data := make([]string, 0, 26)
+	for i := 'a'; i <= 'z'; i++ {
+		for len := 1; len < 100; len++ {
+			// append string with length of len and same letter i
+			data = append(data, strings.Repeat(string(i), len))
+		}
+	}
+
 	// Remove the tmp directory if it exists
 	if err := os.RemoveAll("tmp"); err != nil {
 		log.Fatalf("Failed to remove tmp directory: %v", err)
@@ -47,35 +57,66 @@ func test() error {
 	}
 	defer conn.Close()
 	client := pb.NewNodeRouterClient(conn)
+	conn2, err := grpc.NewClient("localhost:51004", grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		log.Fatalf("Failed to connect to gRPC server: %v", err)
+	}
+	defer conn2.Close()
+	client2 := pb.NewNodeRouterClient(conn2)
 
 	fmt.Print("Test started\n")
 
 	// Step 2: Read a key 'hello' from shard 1, expect an error
-	_, err = client.Read(context.Background(), &pb.ReadRequest{ClusterID: 1, Key: "hello"})
-	if err == nil {
-		log.Fatalf("Expected error when reading key 'hello' from shard 1")
+	for _, key := range data {
+		var clusterId uint64
+		var c pb.NodeRouterClient
+		if key < "n" {
+			clusterId = 1
+			c = client
+		} else {
+			clusterId = 2
+			c = client2
+		}
+		_, err = c.Read(context.Background(), &pb.ReadRequest{ClusterID: clusterId, Key: key})
+		if err == nil {
+			log.Fatalf("Expected error when reading key %s from shard %d", key, clusterId)
+		}
 	}
 	fmt.Print("Step 2 passed\n")
 
 	// Step 3: Write key value "hello", "hello-dragonboat" to shard 1
-	_, err = client.Write(context.Background(), &pb.WriteRequest{ClusterID: 1, Key: "hello", Value: "hello-dragonboat"})
-	if err != nil {
-		log.Fatalf("Failed to write key 'hello' to shard 1: %v", err)
-	}
-	_, err = client.Write(context.Background(), &pb.WriteRequest{ClusterID: 1, Key: "hi", Value: "hi-dragonboat"})
-	if err != nil {
-		log.Fatalf("Failed to write key 'hello' to shard 1: %v", err)
+	for _, key := range data {
+		var clusterId uint64
+		var c pb.NodeRouterClient
+		if key < "n" {
+			clusterId = 1
+			c = client
+		} else {
+			clusterId = 2
+			c = client2
+		}
+		_, err = c.Write(context.Background(), &pb.WriteRequest{ClusterID: clusterId, Key: key, Value: key})
+		if err != nil {
+			log.Fatalf("Failed to write key %s to shard %d: %v", key, clusterId, err)
+		}
 	}
 	fmt.Print("Step 3 passed\n")
 
 	// Step 4: Read a key 'hello' from shard 1, expect the value 'hello-dragonboat'
-	resp, err := client.Read(context.Background(), &pb.ReadRequest{ClusterID: 1, Key: "hello"})
-	if err != nil || resp.GetData() != "hello-dragonboat" {
-		log.Fatalf("Failed to read key 'hello' from shard 1: %v", err)
-	}
-	resp, err = client.Read(context.Background(), &pb.ReadRequest{ClusterID: 1, Key: "hi"})
-	if err != nil || resp.GetData() != "hi-dragonboat" {
-		log.Fatalf("Failed to read key 'hi' from shard 1: %v", err)
+	for _, key := range data {
+		var clusterId uint64
+		var c pb.NodeRouterClient
+		if key < "n" {
+			clusterId = 1
+			c = client
+		} else {
+			clusterId = 2
+			c = client2
+		}
+		resp, err := c.Read(context.Background(), &pb.ReadRequest{ClusterID: clusterId, Key: key})
+		if err != nil || resp.GetData() != key {
+			log.Fatalf("Failed to read key %s from shard %d: %v", key, clusterId, err)
+		}
 	}
 	fmt.Print("Step 4 passed\n")
 
@@ -104,32 +145,32 @@ func test() error {
 	time.Sleep(5 * time.Second) // Wait for migration to complete
 	fmt.Print("Step 5 passed\n")
 
-	// Step 6: Read a key 'hello' from shard 1, expect an error
-	_, err = client.Read(context.Background(), &pb.ReadRequest{ClusterID: 1, Key: "hello"})
-	if err == nil {
-		log.Fatalf("Expected error when reading key 'hello' from shard 1 after migration")
-	}
-	_, err = client.Read(context.Background(), &pb.ReadRequest{ClusterID: 1, Key: "hi"})
-	if err == nil {
-		log.Fatalf("Expected error when reading key 'hi' from shard 1 after migration")
+	// Step 6: Read after migration, expect error
+	for _, key := range data {
+		if key >= "h" && key < "m" {
+			_, err = client.Read(context.Background(), &pb.ReadRequest{ClusterID: 1, Key: key})
+			if err == nil {
+				log.Fatalf("Expected error when reading key 'hello' from shard 1 after migration")
+			}
+		}
 	}
 	fmt.Print("Step 6 passed\n")
 
-	// Step 7: Read a key 'hello' from shard 2, expect the value 'hello-dragonboat'
-	conn2, err := grpc.NewClient("localhost:51004", grpc.WithTransportCredentials(insecure.NewCredentials()))
-	if err != nil {
-		log.Fatalf("Failed to connect to gRPC server for shard 2: %v", err)
-	}
-	defer conn2.Close()
-	client2 := pb.NewNodeRouterClient(conn2)
-
-	resp, err = client2.Read(context.Background(), &pb.ReadRequest{ClusterID: 2, Key: "hello"})
-	if err != nil || resp.GetData() != "hello-dragonboat" {
-		log.Fatalf("Failed to read key 'hello' from shard 2: %v", err)
-	}
-	resp, err = client2.Read(context.Background(), &pb.ReadRequest{ClusterID: 2, Key: "hi"})
-	if err != nil || resp.GetData() != "hi-dragonboat" {
-		log.Fatalf("Failed to read key 'hi' from shard 2: %v", err)
+	// Step 7: Read after migration
+	for _, key := range data {
+		var clusterId uint64
+		var c pb.NodeRouterClient
+		if key < "h" || (key >= "m" && key < "n") {
+			clusterId = 1
+			c = client
+		} else {
+			clusterId = 2
+			c = client2
+		}
+		resp, err := c.Read(context.Background(), &pb.ReadRequest{ClusterID: clusterId, Key: key})
+		if err != nil || resp.GetData() != key {
+			log.Fatalf("Failed to read key 'hello' from shard %d: %v", clusterId, err)
+		}
 	}
 	fmt.Print("Step 7 passed\n")
 
@@ -154,14 +195,34 @@ func test() error {
 	fmt.Print("Waiting for AdaptoDB restart\n")
 	time.Sleep(schema.ADAPTODB_LAUNCH_TIMEOUT) // Wait for the server to start
 
-	// Step 10: Read a key 'hello' from shard 2, expect the value 'hello-dragonboat'
-	resp, err = client2.Read(context.Background(), &pb.ReadRequest{ClusterID: 2, Key: "hello"})
-	if err != nil || resp.GetData() != "hello-dragonboat" {
-		log.Fatalf("Failed to read key 'hello' from shard 2 after restart: %v", err)
+	conn, err = grpc.NewClient("localhost:51001", grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		log.Fatalf("Failed to connect to gRPC server: %v", err)
 	}
-	resp, err = client2.Read(context.Background(), &pb.ReadRequest{ClusterID: 2, Key: "hi"})
-	if err != nil || resp.GetData() != "hi-dragonboat" {
-		log.Fatalf("Failed to read key 'hi' from shard 2 after restart: %v", err)
+	defer conn.Close()
+	client = pb.NewNodeRouterClient(conn)
+	conn2, err = grpc.NewClient("localhost:51004", grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		log.Fatalf("Failed to connect to gRPC server for shard 2: %v", err)
+	}
+	defer conn2.Close()
+	client2 = pb.NewNodeRouterClient(conn2)
+
+	// Step 10: Read a key 'hello' from shard 2, expect the value 'hello-dragonboat'
+	for _, key := range data {
+		var clusterId uint64
+		var c pb.NodeRouterClient
+		if key < "h" || (key >= "m" && key < "n") {
+			clusterId = 1
+			c = client
+		} else {
+			clusterId = 2
+			c = client2
+		}
+		resp, err := c.Read(context.Background(), &pb.ReadRequest{ClusterID: clusterId, Key: key})
+		if err != nil || resp.GetData() != key {
+			log.Fatalf("Failed to read key 'hello' from shard %d: %v", clusterId, err)
+		}
 	}
 	fmt.Print("Step 10 passed\n")
 

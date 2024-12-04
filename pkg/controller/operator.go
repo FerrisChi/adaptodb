@@ -46,7 +46,6 @@ func getRandomNodeHTTPServer(shard schema.RaftGroup) (schema.NodeInfo, string) {
 }
 
 func (op *Operator) migrate(ctx context.Context) error {
-	log.Println("Migrating data from shard", op.fromShard.ShardID, "to shard", op.toShard.ShardID)
 
 	fromNode, fromHttpAddress := getRandomNodeHTTPServer(op.fromShard)
 	toNode, toHttpAddress := getRandomNodeHTTPServer(op.toShard)
@@ -93,16 +92,16 @@ func (op *Operator) migrate(ctx context.Context) error {
 	}
 	resp, err := toClient.StartMigration(ctx, req)
 	if err != nil {
-		return fmt.Errorf("failed to start migration: %v", err)
+		return fmt.Errorf("failed to start migration on destination node: %v", err)
 	}
-	log.Println("Migration started on destination node. ", resp.Status)
+	log.Println(string(resp.Data))
 
 	req.Address = toHttpAddress
 	resp, err = fromClient.StartMigration(ctx, req)
 	if err != nil {
-		return fmt.Errorf("failed to start migration: %v", err)
+		return fmt.Errorf("failed to start migration on source node: %v", err)
 	}
-	log.Println("Migration started on source node. ", resp.Status)
+	log.Println(string(resp.Data))
 
 	return nil
 }

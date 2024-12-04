@@ -68,11 +68,11 @@ func (sc *Controller) UpdateSchedule(ctx context.Context, req *pb.UpdateSchedule
 		// Perform data migration asynchronously
 		go func(newSchedule []*schema.Schedule) {
 			// Perform data migrations
-			err := sc.performDataMigration(newSchedule)
+			cnt, err := sc.performDataMigration(newSchedule)
 			if err != nil {
-				log.Printf("Data migration failed: %v", err)
+				log.Printf("Migration operators failed to start: %v", err)
 			} else {
-				log.Println("Data migration completed successfully")
+				log.Printf(" %d migration operators started.", cnt)
 			}
 		}(schedules)
 	}
@@ -85,10 +85,10 @@ func (sc *Controller) UpdateSchedule(ctx context.Context, req *pb.UpdateSchedule
 
 // MigrationTask represents data movement between two shards
 
-func (sc *Controller) performDataMigration(schedule []*schema.Schedule) error {
+func (sc *Controller) performDataMigration(schedule []*schema.Schedule) (int, error) {
 	oldSchedule, err := sc.metadata.GetAllShardKeyRanges()
 	if err != nil {
-		return fmt.Errorf("failed to get old schedule: %v", err)
+		return 0, fmt.Errorf("failed to get old schedule: %v", err)
 	}
 
 	// Map to store migrations between shard pairs
@@ -107,7 +107,7 @@ func (sc *Controller) performDataMigration(schedule []*schema.Schedule) error {
 			// Get shard info once per shard pair
 			shards := sc.metadata.GetShardBatch([]uint64{oldShardID, newShardID})
 			if len(shards) != 2 || shards[0].Members == nil || shards[1].Members == nil {
-				return fmt.Errorf("failed to get valid shard info for shards %d and %d", oldShardID, newShardID)
+				return 0, fmt.Errorf("failed to get valid shard info for shards %d and %d", oldShardID, newShardID)
 			}
 
 			// Collect all intersecting ranges for this shard pair
@@ -130,6 +130,7 @@ func (sc *Controller) performDataMigration(schedule []*schema.Schedule) error {
 		}
 	}
 	// Consolidate overlapping ranges for each migration
+	cnt := 0
 	for _, op := range ops {
 		op.keyRanges = schema.ConsolidateKeyRanges(op.keyRanges)
 		sc.operators = append(sc.operators, op)
@@ -143,12 +144,11 @@ func (sc *Controller) performDataMigration(schedule []*schema.Schedule) error {
 
 		// Wait with timeout
 		if err != nil {
-			log.Printf("Migration failed: %v", err)
-		} else {
-			log.Printf("Migration completed")
+			log.Printf("Migration %d (shard %d -> shard %d) failed: %v", op.taskId, op.fromShard.ShardID, op.toShard.ShardID, err)
+			continue
 		}
 
-		go func(op *Operator) {
+		go func(op *Operator, ctx context.Context) {
 			select {
 			case <-op.done:
 				log.Printf("Migration finished between shards %d and %d", op.fromShard.ShardID, op.toShard.ShardID)
@@ -158,9 +158,10 @@ func (sc *Controller) performDataMigration(schedule []*schema.Schedule) error {
 					log.Printf("Failed to cancel migration: %v", err)
 				}
 			}
-		}(op)
+		}(op, ctx)
+		cnt++
 	}
-	return nil
+	return cnt, nil
 }
 
 func (sc *Controller) findOperator(taskId uint64) *Operator {

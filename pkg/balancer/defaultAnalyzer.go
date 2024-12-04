@@ -4,6 +4,7 @@ import (
 	"adaptodb/pkg/metadata"
 	pb "adaptodb/pkg/proto/proto"
 	"adaptodb/pkg/schema"
+	"adaptodb/pkg/utils"
 	"context"
 	"fmt"
 	"log"
@@ -27,7 +28,6 @@ func NewDefaultAnalyzer(strategy string, metadata *metadata.Metadata) Analyzer {
 }
 
 func (a *DefaultAnalyzer) AnalyzeLoads() ([]schema.Schedule, bool) {
-
 	// 1. collect metrics
 	loads, err := a.collectMetrics()
 	if err != nil {
@@ -88,7 +88,6 @@ func (a *DefaultAnalyzer) detectImbalanceShards(loads []*NodeMetrics) ([]uint64,
 
 func queryNodeStats(nodeAddress string) (*NodeMetrics, error) {
 	conn, err := grpc.NewClient(nodeAddress, grpc.WithTransportCredentials(insecure.NewCredentials()))
-
 	if err != nil {
 		log.Fatalf("Failed to connect to gRPC server: %v", err)
 		return nil, err
@@ -114,16 +113,17 @@ func queryNodeStats(nodeAddress string) (*NodeMetrics, error) {
 }
 
 func (a *DefaultAnalyzer) collectMetrics() ([]*NodeMetrics, error) {
+	logger := utils.NamedLogger("DefaultAnalyzer")
 	// Use gRPC to collect metrics from each shard
 	var ret []*NodeMetrics
 	for _, shard := range a.metadata.Config.RaftGroups {
 		// Try to query all members of the shard
 		for _, member := range shard.Members {
 			statsAddr := fmt.Sprintf("%s:%d", strings.Split(member.GrpcAddress, ":")[0], 53000+member.ID)
-			log.Printf("Querying node stats for %s", statsAddr)
+			logger.Logf("Querying node stats for %s", statsAddr)
 			res, err := queryNodeStats(statsAddr)
 			if err != nil {
-				log.Printf("Failed to query node stats: %v", err)
+				logger.Logf("Failed to query node stats: %v", err)
 				ret = append(ret, &NodeMetrics{
 					ShardID:              shard.ShardID,
 					NodeID:               member.ID,
@@ -132,10 +132,10 @@ func (a *DefaultAnalyzer) collectMetrics() ([]*NodeMetrics, error) {
 					NumFailedRequests:    -1,
 				})
 			} else {
-				log.Printf("Node %d in Shard %d has %d entries:", member.ID, shard.ShardID, res.NumEntries)
-				log.Println("Successful Requests: ", res.NumSuccessfulRequets)
-				log.Println("Failed Requests: ", res.NumFailedRequests)
-				log.Println("Last Reset Time: ", res.LastResetTime)
+				logger.Logf("Node %d in Shard %d has %d entries:", member.ID, shard.ShardID, res.NumEntries)
+				logger.Logf("Successful Requests: ", res.NumSuccessfulRequets)
+				logger.Logf("Failed Requests: ", res.NumFailedRequests)
+				logger.Logf("Last Reset Time: ", res.LastResetTime)
 				res.ShardID = shard.ShardID
 				res.NodeID = member.ID
 				ret = append(ret, res)
