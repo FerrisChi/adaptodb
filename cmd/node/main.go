@@ -17,6 +17,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/pkg/profile"
+
 	pb "adaptodb/pkg/proto/proto"
 
 	"github.com/lni/dragonboat/v3"

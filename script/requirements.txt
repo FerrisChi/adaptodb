@@ -1,0 +1,13 @@
+# Docker SDK for Python
+docker>=6.1.3
+
+# Logging and utilities
+python-dotenv>=1.0.0
+
+# Testing and development
+pytest>=8.0.0
+black>=24.1.1  # for code formatting
+pylint>=3.0.3  # for linting
+
+# Network utilities
+netifaces>=0.11.0  # for network interface detection

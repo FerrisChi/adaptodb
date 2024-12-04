@@ -13,10 +13,11 @@ type Controller struct {
 	metadata *metadata.Metadata `yaml:"metadata" json:"metadata"`
 	pb.UnimplementedControllerServer
 	operators []*Operator
+	launcher  *Launcher
 }
 
-func NewController(metadata *metadata.Metadata) *Controller {
-	return &Controller{metadata: metadata}
+func NewController(lanucher *Launcher, metadata *metadata.Metadata) *Controller {
+	return &Controller{metadata: metadata, lanucher: lanucher}
 }
 
 func (sc *Controller) Start() {
@@ -36,6 +37,22 @@ func (sc *Controller) UpdateSchedule(ctx context.Context, req *pb.UpdateSchedule
 	if len(protoSchedule) > 0 {
 		schedules := make([]*schema.Schedule, 0, len(protoSchedule))
 		for _, shard := range protoSchedule {
+			if shard.GetFailedServers() != nil {
+				// Handle failed nodes
+				for _, failedNode := range shard.GetFailedServers() {
+					// Find node info
+					for _, group := range sc.metadata.Config.RaftGroups {
+						for _, nodeInfo := range group.Members {
+							if nodeInfo.ID == failedNode {
+								// Restart server
+								log.Printf("Restarting server %d", failedNode)
+								sc.launcher.StartNode(nodeInfo)
+							}
+						}
+					}
+					sc.launcher.Launch()
+				}
+			}
 			schedule := &schema.Schedule{
 				ShardID: shard.GetShardId(),
 			}

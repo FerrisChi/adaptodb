@@ -22,6 +22,7 @@ message KeyRangeList {
 message Schedule {
   uint64 shardId = 1;
   repeated KeyRange keyRanges = 2;
+  repeated uint64 failedServers = 3;
 }
 
 message UpdateScheduleRequest {

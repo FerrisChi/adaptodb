@@ -1,5 +1,11 @@
 # TODO List
 
+## Future Improvements
+
+- Containerization
+- Dynamic Membership
+- Real-world deployment
+
 ## Initialization
 - [ ] Let adaptodb know if raft groups are ready.
 - [ ] Timeout should be dynamically set according to the size of the data migrated as an improvement
