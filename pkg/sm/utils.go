@@ -5,7 +5,7 @@ import (
 )
 
 func (s *KVStore) updateSchedule(flag string, krs []schema.KeyRange) uint64 {
-	keys := 0
+	numKeysModified := 0
 	if flag == "remove" {
 		// remove krs from existing krs
 		s.krs = schema.RemoveKeyRanges(s.krs, krs)
@@ -14,7 +14,8 @@ func (s *KVStore) updateSchedule(flag string, krs []schema.KeyRange) uint64 {
 			for _, kr := range krs {
 				if k >= kr.Start && k < kr.End {
 					s.Data.Delete(k)
-					keys++
+					s.NumEntries--
+					numKeysModified++
 					break
 				}
 			}
@@ -27,7 +28,8 @@ func (s *KVStore) updateSchedule(flag string, krs []schema.KeyRange) uint64 {
 			k := key.(string)
 			for _, kr := range krs {
 				if k >= kr.Start && k < kr.End {
-					keys++
+					numKeysModified++
+					// Do not call s.NumEntries++ here, as it has already been incremented in Update()
 					break
 				}
 			}
@@ -47,10 +49,11 @@ func (s *KVStore) updateSchedule(flag string, krs []schema.KeyRange) uint64 {
 			}
 			if !flag {
 				s.Data.Delete(k)
-				keys++
+				s.NumEntries--
+				numKeysModified++
 			}
 			return true
 		})
 	}
-	return uint64(keys)
+	return uint64(numKeysModified)
 }

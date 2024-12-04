@@ -24,6 +24,7 @@ type serializedKV struct {
 type serializedSnapshot struct {
 	KVPairs []serializedKV
 	Krs     []schema.KeyRange
+	NumEntries int64
 }
 
 type KVStore struct {
@@ -121,8 +122,12 @@ func (s *KVStore) Update(data []byte) (statemachine.Result, error) {
 	case "remove":
 		// Format: remove:key
 		key := string(params)
+		if _, exists := s.Data.Load(key); !exists {
+			return statemachine.Result{Value: 0, Data: []byte(fmt.Sprintf("Key %s does not exist.", key))}, nil
+		}
 		s.Data.Delete(key)
-		return statemachine.Result{Value: 1, Data: []byte(fmt.Sprintf("Key %s removed successfully.", key))}, nil
+		s.NumEntries--
+		return statemachine.Result{Value: 0, Data: []byte(fmt.Sprintf("Key %s removed successfully.", key))}, nil
 	case "migrate_src":
 		// Format: migrate_src:taskId,leaderId,ctrlAddress,toAddress,keyRange
 		kv := bytes.SplitN(params, []byte(","), 5)
@@ -194,6 +199,7 @@ func (s *KVStore) Update(data []byte) (statemachine.Result, error) {
 			}
 			key, value := string(kv[0]), string(kv[1])
 			s.Data.Store(key, value)
+			s.NumEntries++
 			succ++
 		}
 		return statemachine.Result{Value: uint64(succ), Data: []byte(fmt.Sprintf("%d data written successfully.", succ))}, nil
@@ -227,6 +233,7 @@ func (s *KVStore) SaveSnapshot(writer io.Writer, _ statemachine.ISnapshotFileCol
 	snapshot := serializedSnapshot{
 		KVPairs: kvPairs,
 		Krs:     s.krs,
+		NumEntries: s.NumEntries,
 	}
 
 	encoder := gob.NewEncoder(writer)

@@ -30,7 +30,7 @@ func (sc *Controller) Stop() {
 // UpdateSchedule handles load updates and performs shard rebalancing
 func (sc *Controller) UpdateSchedule(ctx context.Context, req *pb.UpdateScheduleRequest) (*pb.UpdateScheduleResponse, error) {
 	log.Println("Received new schedule update request")
-
+	
 	// Extract shard load information from request
 	protoSchedule := req.GetSchedule()
 	if len(protoSchedule) > 0 {
@@ -45,8 +45,10 @@ func (sc *Controller) UpdateSchedule(ctx context.Context, req *pb.UpdateSchedule
 					End:   keyRange.GetEnd(),
 				})
 			}
+			log.Println("Schedule received: ", *schedule)
 			schedules = append(schedules, schedule)
 		}
+
 
 		// Perform data migration asynchronously
 		go func(newSchedule []*schema.Schedule) {
