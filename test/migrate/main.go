@@ -21,7 +21,7 @@ func test() error {
 
 	data := make([]string, 0, 26)
 	for i := 'a'; i <= 'z'; i++ {
-		for len := 1; len < 2; len++ {
+		for len := 1; len < 5; len++ {
 			// append string with length of len and same letter i
 			data = append(data, strings.Repeat(string(i), len))
 		}

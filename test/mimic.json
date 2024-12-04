@@ -1,7 +1,0 @@
-{
-    "total": 10000,
-    "concurrency": 50,
-    "call": "proto.ShardRouter/GetConfig",
-    "host": "localhost:60081",
-    "insecure": true
-}
