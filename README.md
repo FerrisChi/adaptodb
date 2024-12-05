@@ -127,14 +127,17 @@ makefile
 
 ## Test
 
+### Run go test
+
+1. `cd test`
+2. `go test`
+   * Add `-v` to see verbose output
+
 ### Run test script
 
-1. `go run test/migrate/main.go`
+1. `go run script/stress.go`
 
-2. `go run test/stress/main.go`
-
-### Run simulation (executing adaptodb before running)
-1. Use Locust:
-
-   1. Generate proto for python: `python -m grpc_tools.protoc -I./pkg/proto --python_out=./test/generated_pb --grpc_python_out=./test/generated_pb ./pkg/proto/controller.proto ./pkg/proto/router.proto ./pkg/proto/nodeRouter.proto`
-   2. Start the simulation: `locust`
+### Run Locust simulation (executing adaptodb before running)
+1. `cd script`
+2. `pip3 install locust`
+3. Start the simulation: `locust`

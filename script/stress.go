@@ -214,12 +214,12 @@ func worker(id int, meta *Metadata, metrics *Metrics, wg *sync.WaitGroup, stopCh
 	// 	key := generateKey()
 	// 	value := generateValue()
 	// 	status, err := write(key, value, meta)
-	// 	if err != nil || status == 0 {
+	// 	if err != nil || status == 0 {f
 	// 		atomic.AddUint64(&metrics.failedWrites, 1)
 	// 		// log.Printf("Worker %d: Write error: %v", id, err)
 	// 		continue
 	// 	}
-	// 	atomic.AddUint64(&metrics.successfulWrites, 1)
+	// 	atomic.AddUint64(&metrics.successulWrites, 1)
 	// 	testKeys = append(testKeys, key)
 	// }
 

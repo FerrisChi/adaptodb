@@ -94,7 +94,8 @@ func (a *DefaultAnalyzer) collectMetrics() ([]*NodeMetrics, error) {
 	logger := utils.NamedLogger("DefaultAnalyzer")
 	// Use gRPC to collect metrics from each shard
 	var ret []*NodeMetrics
-	for _, shard := range a.metadata.Config.RaftGroups {
+	raftGroup := a.metadata.GetConfig()
+	for _, shard := range raftGroup {
 		// Try to query all members of the shard
 		for _, member := range shard.Members {
 			statsAddr := fmt.Sprintf("%s:%d", strings.Split(member.GrpcAddress, ":")[0], 53000+member.ID)
