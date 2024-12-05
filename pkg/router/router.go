@@ -49,7 +49,8 @@ func (r *Router) HandleConfigRequest(w http.ResponseWriter, q *http.Request) {
 	// Get and convert member information
 	result := make(map[uint64][]schema.KeyRange)
 	memberMap := make(map[uint64][]schema.NodeInfo)
-	for _, v := range r.metadata.Config.RaftGroups {
+	raftGroup := r.metadata.GetConfig()
+	for _, v := range raftGroup {
 		shardId := v.ShardID
 		memberMap[shardId] = v.Members
 		result[shardId] = v.KeyRanges
@@ -95,7 +96,7 @@ func (r *Router) GetConfig(ctx context.Context, req *pb.GetConfigRequest) (*pb.G
 	}
 
 	memberMap := make(map[uint64]*pb.Members)
-	for _, v := range r.metadata.GetAllShardMembers() {
+	for _, v := range r.metadata.GetConfig() {
 		shardId := v.ShardID
 		members := make([]*pb.Member, 0, len(v.Members))
 		for _, nodeInfo := range v.Members {
