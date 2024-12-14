@@ -2,10 +2,9 @@
 FROM golang:1.22.7-alpine
 
 # Set proxy environment variables
-ENV http_proxy="http://host.docker.internal:7890"
-ENV https_proxy="http://host.docker.internal:7890"
-ENV all_proxy="socks5://host.docker.internal:7890"
-ENV no_proxy="127.0.0.1,localhost,host.docker.internal"
+# ENV http_proxy="http://host.docker.internal:7890"
+# ENV https_proxy="http://host.docker.internal:7890"
+# ENV all_proxy="socks5://host.docker.internal:7890"
 
 # Configure Alpine repositories and install dependencies
 # RUN echo "https://dl-cdn.alpinelinux.org/alpine/v3.19/main" > /etc/apk/repositories
@@ -16,6 +15,12 @@ RUN apk add --no-cache protoc protobuf-dev make git
 # Install protoc-gen-go and protoc-gen-go-grpc
 RUN go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
 RUN go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
+
+
+# Unset proxy environment variables for runtime 
+# ENV http_proxy=""
+# ENV https_proxy=""
+# ENV all_proxy=""
 
 # Add protoc plugins to PATH
 ENV PATH="$PATH:$(go env GOPATH)/bin"

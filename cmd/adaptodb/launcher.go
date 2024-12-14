@@ -92,22 +92,59 @@ func (l *Launcher) setupNetwork() error {
 }
 
 func (l *Launcher) launchLocal(spec NodeSpec, members []schema.NodeInfo, keyRanges []schema.KeyRange) error {
-	if !l.networkIsSetup {
-		if err := l.setupNetwork(); err != nil {
-			return fmt.Errorf("failed to setup docker network: %v", err)
-		}
-		l.networkIsSetup = true
-	}
-
 	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
 	if err != nil {
 		return fmt.Errorf("failed to create Docker client: %v", err)
 	}
 	defer cli.Close()
+	
+	if !l.networkIsSetup {
+		// Check if the network already exists
+		networks, err := cli.NetworkList(context.Background(), network.ListOptions{
+			Filters: filters.NewArgs(
+                filters.Arg("name", "adaptodb-net"),
+            ),
+		})
+		if err != nil {
+			return fmt.Errorf("failed to list Docker networks: %v", err)
+		}
+
+		if len(networks) == 0 {
+            // Network does not exist, create it
+            if err := l.setupNetwork(); err != nil {
+                return fmt.Errorf("failed to setup docker network: %v", err)
+            }
+        }
+		l.networkIsSetup = true
+	}
+
+	
+
+	// Check if the container already exists
+	containers, err := cli.ContainerList(context.Background(), container.ListOptions{
+		All: true,
+		Filters: filters.NewArgs(
+			filters.Arg("name", spec.info.Name),
+		),
+	})
+	if err != nil {
+		return fmt.Errorf("failed to list Docker containers: %v", err)
+	}
+
+	if len(containers) > 0 {
+		// Container exists, start it if it's not running
+		containerID := containers[0].ID
+		if containers[0].State != "running" {
+			if err := cli.ContainerStart(context.Background(), containerID, container.StartOptions{}); err != nil {
+				return fmt.Errorf("failed to start Docker container: %v", err)
+			}
+		}
+		fmt.Printf("Container %s is already running\n", spec.info.Name)
+		return nil
+	}
 
 	// Define the command and arguments to pass to the container
 	cmd := []string{
-		// "./bin/release/node",  // use this in production
 		"./bin/debug/node", // use this in development
 		"--id", fmt.Sprintf("%d", spec.info.ID),
 		"--group-id", fmt.Sprintf("%d", spec.GroupID),
@@ -139,7 +176,7 @@ func (l *Launcher) launchLocal(spec NodeSpec, members []schema.NodeInfo, keyRang
 
 	log.Printf("Port bindings: %v", portBindings)
 
-	// Run the existing container with the specified arguments
+	// Create the container
 	resp, err := cli.ContainerCreate(context.Background(), &container.Config{
 		Image:    "adaptodb-node", // Replace with your Docker image
 		Cmd:      cmd,
@@ -180,7 +217,7 @@ func (l *Launcher) dockerCleanup() error {
 		return fmt.Errorf("failed to list Docker containers: %v", err)
 	}
 
-	// Stop and remove containers
+	// Stop containers
 	for _, cntner := range containers {
 		fmt.Printf("Stopping container %s (%s)...\n", cntner.ID[:10], cntner.Names[0])
 		if err := cli.ContainerStop(ctx, cntner.ID, container.StopOptions{}); err != nil {
@@ -189,37 +226,37 @@ func (l *Launcher) dockerCleanup() error {
 		}
 
 		// Remove container and its volumes
-		fmt.Printf("Removing container %s and its volumes...\n", cntner.ID[:10])
-		if err := cli.ContainerRemove(ctx, cntner.ID, container.RemoveOptions{
-			RemoveVolumes: true,
-			Force:         true,
-		}); err != nil {
-			fmt.Printf("Warning: failed to remove container: %v\n", err)
-			continue
-		}
+		// fmt.Printf("Removing container %s and its volumes...\n", cntner.ID[:10])
+		// if err := cli.ContainerRemove(ctx, cntner.ID, container.RemoveOptions{
+		// 	RemoveVolumes: true,
+		// 	Force:         true,
+		// }); err != nil {
+		// 	fmt.Printf("Warning: failed to remove container: %v\n", err)
+		// 	continue
+		// }
 	}
 	fmt.Println("Containers cleanup succeed")
 
 	// Remove docker network
-	networks, err := cli.NetworkList(ctx, network.ListOptions{
-		Filters: filters.NewArgs(
-			filters.Arg("name", l.networkName),
-		),
-	})
-	if err != nil {
-		return fmt.Errorf("failed to list networks: %v", err)
-	}
+	// networks, err := cli.NetworkList(ctx, network.ListOptions{
+	// 	Filters: filters.NewArgs(
+	// 		filters.Arg("name", l.networkName),
+	// 	),
+	// })
+	// if err != nil {
+	// 	return fmt.Errorf("failed to list networks: %v", err)
+	// }
 
-	for _, nw := range networks {
-		fmt.Printf("Removing network %s...\n", nw.Name)
-		if err := cli.NetworkRemove(ctx, nw.ID); err != nil {
-			if !errdefs.IsNotFound(err) {
-				fmt.Printf("Warning: failed to remove network: %v\n", err)
-			}
-			continue
-		}
-	}
-	fmt.Println("Network cleanup succeed")
+	// for _, nw := range networks {
+	// 	fmt.Printf("Removing network %s...\n", nw.Name)
+	// 	if err := cli.NetworkRemove(ctx, nw.ID); err != nil {
+	// 		if !errdefs.IsNotFound(err) {
+	// 			fmt.Printf("Warning: failed to remove network: %v\n", err)
+	// 		}
+	// 		continue
+	// 	}
+	// }
+	// fmt.Println("Network cleanup succeed")
 
 	return nil
 }

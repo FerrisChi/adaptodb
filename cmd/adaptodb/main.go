@@ -40,7 +40,7 @@ func main() {
 	handleDarwinSignal()
 
 	metadataManager := initializeMetadataManager(config, logger)
-	controllerAddress := "127.0.0.1:60082"
+	controllerAddress := "host.docker.internal:60082"
 
 	// Initialize nodes
 	launcher := NewLauncher(controllerAddress)
@@ -50,7 +50,7 @@ func main() {
 
 	startRaftStabilization(metadataManager, logger)
 
-	controller := initializeController(metadataManager, controllerAddress, logger)
+	controller := initializeController(metadataManager, "127.0.0.1:60082", logger)
 	startHTTPServer(metadataManager, logger)
 	startRouterGRPCServer(metadataManager, logger)
 	balancer := startBalancer(controllerAddress, metadataManager, logger)

@@ -40,7 +40,7 @@ func getRandomNodeHTTPServer(shard schema.RaftGroup) (schema.NodeInfo, string) {
 	// idx := uint64(rand.Intn(len(shard.Members)))
 	idx := uint64(0)
 	node := shard.Members[idx]
-	httpAddress := fmt.Sprintf("%s:%d", node.Address, schema.NodeHttpPort+node.ID)
+	httpAddress := fmt.Sprintf("%s:%d", node.Name, schema.NodeHttpPort)
 	return node, httpAddress
 }
 
