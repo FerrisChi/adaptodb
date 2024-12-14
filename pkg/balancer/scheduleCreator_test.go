@@ -119,6 +119,21 @@ func TestBalanceStringKeyRangesByMidpoint(t *testing.T) {
 				1: {{Start: "a", End: "an"}, {Start: "d", End: "h"}, {Start: "t", End: "w"}},
 			},
 		},
+		{
+			name: "an midpoint split test",
+			loads: []*NodeMetrics{
+				{ShardID: 1, NumEntries: 13},
+				{ShardID: 2, NumEntries: 6},
+			},
+			imbalancedShards: []uint64{1, 2},
+			keyRanges: map[uint64][]schema.KeyRange{
+				1: {{Start: "a", End: "an"}, {Start: "b", End: "h"}, {Start: "m", End: "w"}},
+				2: {{Start: "an", End: "b"}, {Start: "h", End: "m"}, {Start: "w", End: "{"}},
+			},
+			expected: map[uint64][]schema.KeyRange{
+				2: {{Start: "a", End: "ag"}, {Start: "b", End: "e"}, {Start: "m", End: "r"}},
+			},
+		},
 	}
 
 	for _, test := range tests {
@@ -145,6 +160,8 @@ func TestFindLexographicalMidpoint(t *testing.T) {
 	}{
 		// {start: "a", end: "z", expected: "m"},
 		{start: "a", end: "a", expected: "an"},
+		{start: "aa", end: "an", expected: "ag"},
+		{start: "aa", end: "aa", expected: "aan"},
 		// {start: "abc", end: "abd", expected: "abcn"},
 		// {start: "prefix", end: "prefixz", expected: "prefixn"},
 	}

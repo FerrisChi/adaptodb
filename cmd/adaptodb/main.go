@@ -48,6 +48,7 @@ func main() {
 	var algoParam float64
 	flag.StringVar(&algoStr, "algo", "Relative", "ImbalanceAlgorithm to use: Relative, Percentile, or Statistical")
 	flag.Float64Var(&algoParam, "algoParam", 10.0, "Paramter for the chosen algorithm (e.g. threshold factor, percentile, or stddev factor)")
+	flag.Parse()
 
 	logger := setupLogger()
 	config := loadConfig(logger)

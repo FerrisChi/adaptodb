@@ -142,10 +142,22 @@ func findLexographicalMidpoint(start, end string) string {
 
 	// Handle edge case where one string is a prefix of the other
 	if i < len(start) {
-		return commonPrefix + start[i:i+1] + "n"
+		// end is prefix of start or they diverge right after the prefix
+		// We'll choose a midpoint between start[i] and a character after start[i]
+		// For simplicity, pick a midpoint between start[i] and 'z'.
+		midChar := byte((start[i] + 'z') / 2)
+		return commonPrefix + string(midChar)
 	}
+
 	if i < len(end) {
-		return commonPrefix + end[i:i+1] + "n"
+		// start is prefix of end
+		// find a midpoint character between the last prefix character and end[i]
+		var startChar byte = 'a'
+		if len(commonPrefix) > 0 {
+			startChar = commonPrefix[len(commonPrefix)-1]
+		}
+		midChar := byte((startChar + end[i]) / 2)
+		return commonPrefix + string(midChar)
 	}
 
 	// If no characters remain, append "n" to the common prefix
