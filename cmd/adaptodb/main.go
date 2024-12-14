@@ -7,6 +7,7 @@ import (
 	"adaptodb/pkg/router"
 	"adaptodb/pkg/schema"
 	"adaptodb/pkg/utils"
+	"flag"
 	"fmt"
 	"log"
 	"net"
@@ -42,6 +43,12 @@ type NodeSpec struct {
 }
 
 func main() {
+	// Define CLI flags to choose load balancer algorithm
+	var algoStr string
+	var algoParam float64
+	flag.StringVar(&algoStr, "algo", "Relative", "ImbalanceAlgorithm to use: Relative, Percentile, or Statistical")
+	flag.Float64Var(&algoParam, "algoParam", 10.0, "Paramter for the chosen algorithm (e.g. threshold factor, percentile, or stddev factor)")
+
 	logger := setupLogger()
 	config := loadConfig(logger)
 
@@ -55,7 +62,14 @@ func main() {
 	controller := initializeController(metadataManager, controllerAddress, logger)
 	startHTTPServer(metadataManager, logger)
 	startRouterGRPCServer(metadataManager, logger)
-	startBalancer(controllerAddress, metadataManager, logger)
+
+	// Convert algoStr to an ImbalanceAlgorithm
+	algo, err := balancer.ParseAlgo(algoStr)
+	if err != nil {
+		logger.Fatalf("Invalid algorithm specified: %v", err)
+	}
+
+	startBalancer(controllerAddress, metadataManager, logger, algo, algoParam)
 
 	waitForShutdown(logger, launcher, controller)
 }
@@ -247,17 +261,22 @@ func startGRPCServer(server *grpc.Server, address string, logger struct {
 }
 
 // startBalancer sets up and starts the balancer.
-func startBalancer(controllerAddress string, metadataManager *metadata.Metadata, logger struct {
-	Logf   func(format string, v ...interface{})
-	Fatalf func(format string, v ...interface{})
-},
+func startBalancer(
+	controllerAddress string,
+	metadataManager *metadata.Metadata,
+	logger struct {
+		Logf   func(format string, v ...interface{})
+		Fatalf func(format string, v ...interface{})
+	},
+	algo balancer.ImbalanceAlgorithm,
+	algoParam float64,
 ) {
 	analyzer := balancer.NewDefaultAnalyzer("default", metadataManager)
 	balancer, err := balancer.NewBalancer(controllerAddress, analyzer)
 	if err != nil {
 		logger.Fatalf("Failed to initialize Balance Watcher: %v", err)
 	}
-	go balancer.StartMonitoring()
+	go balancer.StartMonitoring(algo, algoParam)
 }
 
 // waitForShutdown handles graceful shutdown.
