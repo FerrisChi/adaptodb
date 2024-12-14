@@ -22,6 +22,10 @@ An Adaptive shard-balancing key-value database
 
 3. Run the executable: `./bin/{release|debug}/adaptodb`
 
+## Running Unit Tests
+
+Run `go test -v ./pkg/balancer`
+
 ## Ports
 * AdaptoDB
   * Controller <-> Balancer (within Controller)

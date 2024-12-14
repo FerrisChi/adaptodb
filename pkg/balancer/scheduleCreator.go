@@ -8,6 +8,11 @@ import (
 	"sort"
 )
 
+// BalanceStringKeyRangesByMidpoint attempts to redistribute key ranges between shards to balance their load.
+// Given a set of shard loads, a list of shards identified as imbalanced, and a map of shard IDs to their key ranges,
+// the function identifies the most loaded shard and the least loaded shard. It then splits the most loaded shard’s
+// key ranges at their lexicographical midpoints and reassigns the "upper half" of those ranges to the least loaded shard,
+// thereby attempting to achieve a more balanced distribution of data.
 func BalanceStringKeyRangesByMidpoint(
 	loads []*NodeMetrics,
 	imbalancedShards []uint64,
@@ -50,10 +55,9 @@ func BalanceStringKeyRangesByMidpoint(
 
 		// Assign upper half to another shard
 		if len(sortedShards) > 1 {
-			// keyRanges[leastLoadedShard.ShardID] = append(keyRanges[leastLoadedShard.ShardID], schema.KeyRange{
-			// 	Start: mostLoadedRanges[i].Start,
-			// 	End:   mid,
-			// })
+			if mostLoadedRanges[i].Start == mid {
+				mid = findLexographicalMidpoint(mostLoadedRanges[i].Start, mid)
+			}
 
 			keyRangesToAppend = append(keyRangesToAppend, schema.KeyRange{
 				Start: mostLoadedRanges[i].Start,
@@ -116,8 +120,8 @@ func computeMidpointKey(charStart, charEnd rune, startKey, endKey string) (strin
 // Helper: Find the lexographical midpoint b/w 2 strings
 func findLexographicalMidpoint(start, end string) string {
 	if start == end {
-		// Handle edge case where start == end
-		return start + "n"
+		start = start + start
+		end = end + "{"
 	}
 
 	// Find the common prefix
@@ -132,6 +136,7 @@ func findLexographicalMidpoint(start, end string) string {
 	if i < len(start) && i < len(end) {
 		// Find a midpoint character strictly between start[i] and end[i]
 		midChar := string((start[i] + end[i]) / 2)
+		// log.Printf("commonPrefix: %s", (commonPrefix + midChar))
 		return commonPrefix + midChar
 	}
 
@@ -144,6 +149,7 @@ func findLexographicalMidpoint(start, end string) string {
 	}
 
 	// If no characters remain, append "n" to the common prefix
+	// log.Printf("commonPrefix: %s", (commonPrefix + "n"))
 	return commonPrefix + "n"
 }
 
