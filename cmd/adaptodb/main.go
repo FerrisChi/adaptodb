@@ -26,19 +26,11 @@ import (
 	pb "adaptodb/pkg/proto/proto"
 )
 
-type SSHConfig struct {
-	Host    string // hostname:port or IP:port
-	User    string
-	KeyPath string // path to private key
-}
 type NodeSpec struct {
-	ID          uint64
-	GrpcAddress string     // RPC Address
-	RaftAddress string     // Raft Address
-	SSH         *SSHConfig // nil for local nodes
-	GroupID     uint64
-	DataDir     string
-	WalDir      string
+	info    schema.NodeInfo
+	GroupID uint64
+	DataDir string
+	WalDir  string
 }
 
 func main() {
@@ -48,16 +40,22 @@ func main() {
 	handleDarwinSignal()
 
 	metadataManager := initializeMetadataManager(config, logger)
-	launcher := initializeNodes(config, metadataManager, logger)
+	controllerAddress := "127.0.0.1:60082"
+
+	// Initialize nodes
+	launcher := NewLauncher(controllerAddress)
+	for _, group := range config.RaftGroups {
+		launchNodes(group, metadataManager, launcher, logger)
+	}
+
 	startRaftStabilization(metadataManager, logger)
 
-	controllerAddress := "localhost:60082"
 	controller := initializeController(metadataManager, controllerAddress, logger)
 	startHTTPServer(metadataManager, logger)
 	startRouterGRPCServer(metadataManager, logger)
-	startBalancer(controllerAddress, metadataManager, logger)
+	balancer := startBalancer(controllerAddress, metadataManager, logger)
 
-	waitForShutdown(logger, launcher, controller)
+	waitForShutdown(logger, launcher, controller, balancer)
 }
 
 // setupLogger configures the logger
@@ -116,60 +114,32 @@ func initializeMetadataManager(config schema.Config, logger struct {
 	return metadataManager
 }
 
-// initializeNodes launches the Raft nodes.
-func initializeNodes(config schema.Config, metadataManager *metadata.Metadata, logger struct {
-	Logf   func(format string, v ...interface{})
-	Fatalf func(format string, v ...interface{})
-},
-) *Launcher {
-	controllerAddress := "127.0.0.1:60082"
-	launcher := NewLauncher(controllerAddress)
-	defer launcher.Stop()
-
-	for _, group := range config.RaftGroups {
-		launchNodes(group, metadataManager, launcher, logger)
-	}
-	return launcher
-}
-
 func launchNodes(group schema.RaftGroup, metadataManager *metadata.Metadata, launcher *Launcher, logger struct {
 	Logf   func(format string, v ...interface{})
 	Fatalf func(format string, v ...interface{})
 },
 ) {
-	groupMembers := make(map[uint64]string)
-	for _, nodeInfo := range group.Members {
-		groupMembers[nodeInfo.ID] = nodeInfo.RaftAddress
+	for i := 0; i < len(group.Members); i++ {
+		nodeInfo := &group.Members[i]
+		if nodeInfo.Name == "" {
+			nodeInfo.Name = fmt.Sprintf("node-%d", nodeInfo.ID)
+			metadataManager.UpdateNodeInfo(nodeInfo.ID, *nodeInfo)
+		}
 	}
 	keyRanges := metadataManager.GetShardKeyRanges(group.ShardID)
 
 	for _, nodeInfo := range group.Members {
-		spec := createNodeSpec(nodeInfo, group.ShardID)
-		if err := launcher.Launch(spec, groupMembers, keyRanges); err != nil {
+		spec := NodeSpec{
+			info:    nodeInfo,
+			GroupID: group.ShardID,
+			DataDir: fmt.Sprintf("tmp/data/node%d", nodeInfo.ID),
+			WalDir:  fmt.Sprintf("tmp/wal/node%d", nodeInfo.ID),
+		}
+		if err := launcher.Launch(spec, group.Members, keyRanges); err != nil {
 			logger.Fatalf("Failed to launch node %d: %v", nodeInfo.ID, err)
 		}
 	}
 	logger.Logf("All nodes in group %d launched.", group.ShardID)
-}
-
-func createNodeSpec(nodeInfo schema.NodeInfo, groupID uint64) NodeSpec {
-	var ssh *SSHConfig
-	if !IsLocalAddress(nodeInfo.GrpcAddress) {
-		ssh = &SSHConfig{
-			Host:    nodeInfo.GrpcAddress,
-			User:    nodeInfo.User,
-			KeyPath: nodeInfo.SSHKeyPath,
-		}
-	}
-	return NodeSpec{
-		ID:          nodeInfo.ID,
-		GrpcAddress: nodeInfo.GrpcAddress,
-		RaftAddress: nodeInfo.RaftAddress,
-		SSH:         ssh,
-		GroupID:     groupID,
-		DataDir:     fmt.Sprintf("tmp/data/node%d", nodeInfo.ID),
-		WalDir:      fmt.Sprintf("tmp/wal/node%d", nodeInfo.ID),
-	}
 }
 
 // startRaftStabilization waits for Raft to stabilize.
@@ -252,20 +222,21 @@ func startBalancer(controllerAddress string, metadataManager *metadata.Metadata,
 	Logf   func(format string, v ...interface{})
 	Fatalf func(format string, v ...interface{})
 },
-) {
+) *balancer.Balancer {
 	analyzer := balancer.NewDefaultAnalyzer("default", metadataManager)
 	balancer, err := balancer.NewBalancer(controllerAddress, analyzer)
 	if err != nil {
 		logger.Fatalf("Failed to initialize Balance Watcher: %v", err)
 	}
 	go balancer.StartMonitoring()
+	return balancer
 }
 
 // waitForShutdown handles graceful shutdown.
 func waitForShutdown(logger struct {
 	Logf   func(format string, v ...interface{})
 	Fatalf func(format string, v ...interface{})
-}, launcher *Launcher, controller *controller.Controller,
+}, launcher *Launcher, controller *controller.Controller, balancer *balancer.Balancer,
 ) {
 	sigChan := make(chan os.Signal, 1)
 	defer close(sigChan)
@@ -282,6 +253,8 @@ func waitForShutdown(logger struct {
 		session.Close()
 	}
 
+	launcher.Stop()
 	controller.Stop()
+	balancer.Stop()
 	logger.Logf("AdaptoDB has shut down gracefully.")
 }

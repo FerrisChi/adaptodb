@@ -100,7 +100,7 @@ func (r *Router) GetConfig(ctx context.Context, req *pb.GetConfigRequest) (*pb.G
 		shardId := v.ShardID
 		members := make([]*pb.Member, 0, len(v.Members))
 		for _, nodeInfo := range v.Members {
-			members = append(members, &pb.Member{Id: nodeInfo.ID, Addr: nodeInfo.GrpcAddress, User: nodeInfo.User, SshKeyPath: nodeInfo.SSHKeyPath})
+			members = append(members, &pb.Member{Id: nodeInfo.ID, Addr: nodeInfo.Address, User: nodeInfo.User, SshKeyPath: nodeInfo.SSHKeyPath})
 		}
 		memberMap[shardId] = &pb.Members{Members: members}
 	}

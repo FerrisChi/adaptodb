@@ -167,7 +167,8 @@ func (ms *Metadata) UpdateKeyRangeFromNode() {
 	for i := range ms.config.RaftGroups {
 		shard := &ms.config.RaftGroups[i]
 		for _, node := range shard.Members {
-			conn, err := grpc.NewClient(node.GrpcAddress, grpc.WithTransportCredentials(insecure.NewCredentials()))
+			target := fmt.Sprintf("%s:%d", node.Address, schema.NodeGrpcPort+node.ID)
+			conn, err := grpc.NewClient(target, grpc.WithTransportCredentials(insecure.NewCredentials()))
 			if err != nil {
 				log.Printf("failed to connect to node %d: %v", node.ID, err)
 				continue
@@ -182,6 +183,18 @@ func (ms *Metadata) UpdateKeyRangeFromNode() {
 			shard.KeyRanges = schema.ParseKeyRanges(resp.KeyRanges)
 			log.Printf("Updated shard %d key ranges from node %d: %v", shard.ShardID, node.ID, shard.KeyRanges)
 			break
+		}
+	}
+}
+
+// UpdateNodeInfo update the node info for a given node ID
+func (ms *Metadata) UpdateNodeInfo(nodeID uint64, nodeInfo schema.NodeInfo) {
+	for i, group := range ms.config.RaftGroups {
+		for j, node := range group.Members {
+			if node.ID == nodeID {
+				ms.config.RaftGroups[i].Members[j] = nodeInfo
+				return
+			}
 		}
 	}
 }

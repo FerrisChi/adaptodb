@@ -1,7 +1,7 @@
 GO_DEBUG_CMD=go build -gcflags=all="-N -l" # add -gcflags=all="-N -l" for debugging
 GO_RELEASE_CMD=go build
 
-all: docker-build
+all: build
 
 docker-build:
 	docker build -t adaptodb-node -f Dockerfile.node .
@@ -31,9 +31,7 @@ proto:
 		pkg/proto/*.proto;
 
 clean:
-	rm -f adaptodb
-	rm -f client
-	rm -f node
+	rm -rf ./bin/
 	rm -f pkg/*/proto/*.pb.go
 
 .PHONY: docker-build docker-clean build debug release clean proto

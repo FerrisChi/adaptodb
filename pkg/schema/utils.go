@@ -1,6 +1,9 @@
 package schema
 
-import "sort"
+import (
+	"fmt"
+	"sort"
+)
 
 // Helper function to consolidate overlapping key ranges
 func ConsolidateKeyRanges(ranges []KeyRange) []KeyRange {
@@ -63,4 +66,9 @@ func RemoveKeyRanges(ranges1, ranges2 []KeyRange) []KeyRange {
 		result = append(result, modified...)
 	}
 	return ConsolidateKeyRanges(result)
+}
+
+// GetDragronboatAddr returns the address of a Dragonboat node in docker network
+func GetDragronboatAddr(hostName string) string {
+	return fmt.Sprintf("%s:%d", hostName, NodeDragonboatPort)
 }

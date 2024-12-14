@@ -1,6 +1,12 @@
 # Use a specific Alpine version
 FROM golang:1.22.7-alpine
 
+# Set proxy environment variables
+ENV http_proxy="http://host.docker.internal:7890"
+ENV https_proxy="http://host.docker.internal:7890"
+ENV all_proxy="socks5://host.docker.internal:7890"
+ENV no_proxy="127.0.0.1,localhost,host.docker.internal"
+
 # Configure Alpine repositories and install dependencies
 # RUN echo "https://dl-cdn.alpinelinux.org/alpine/v3.19/main" > /etc/apk/repositories
 # RUN echo "https://dl-cdn.alpinelinux.org/alpine/v3.19/community" >> /etc/apk/repositories
@@ -21,5 +27,4 @@ RUN make debug release
 
 # RUN make release # for release build
 
-EXPOSE 51000-54000
-EXPOSE 63000-65000
+EXPOSE 51000-56000

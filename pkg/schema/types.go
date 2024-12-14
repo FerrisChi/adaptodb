@@ -12,12 +12,11 @@ type RaftGroup struct {
 }
 
 type NodeInfo struct {
-	ID          uint64 `yaml:"id"`                   // Required
-	HttpAddress string `yaml:"httpAddress"`          // Required
-	GrpcAddress string `yaml:"grpcAddress"`          // Required
-	RaftAddress string `yaml:"raftAddress"`          // Required
-	User        string `yaml:"user,omitempty"`       // Optional, for remote nodes
-	SSHKeyPath  string `yaml:"sshKeyPath,omitempty"` // Optional, for remote nodes
+	ID         uint64 `yaml:"id"`                   // Required
+	Address    string `yaml:"address"`              // Required, node address
+	Name       string `yaml:"name,omitempty"`       // Optional, node host name in docker network, set to `node-id if not provided
+	User       string `yaml:"user,omitempty"`       // Optional, for remote nodes
+	SSHKeyPath string `yaml:"sshKeyPath,omitempty"` // Optional, for remote nodes
 }
 
 type KeyRange struct {

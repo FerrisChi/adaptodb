@@ -23,28 +23,38 @@ An Adaptive shard-balancing key-value database
 3. Run the executable: `./bin/{release|debug}/adaptodb`
 
 ## Ports
+
+See ports in `pkg/schema/constant.go`
+
 * AdaptoDB
   * Controller <-> Balancer (within Controller)
     * gRPC: 60082
-    * Handle new schedule advice from balancer.
+    * Handles new schedule advice from balancer
   * Controller Router <-> Client
     * HTTP: 60080
     * gRPC: 60081
-    * Handle metadata query.
+    * Handles metadata queries
 
 * Node
-  * Node (router) <-> Client
-    * gRPC: 51000 + node id
-    * Handle read/write request from client and manipulate statemachine.
-  * Node (router) <-> Node
-    * WebSocket: 52000 + node id
-    * Handle data transfer for load balancing.
-  * Node (statsServer) <-> Balancer
-    * gRPC: 53000 + node id
-    * Transferring stats.
-  * Dragonboat internal (Raft)
-    * IP:port set in `config.yaml`
-    * Hanlde dragonboat internal communication.
+  * Node (Router) <-> Client [gRPC]
+    * 51000 (in container network)
+    * 51000 + node ID (in localhost)
+    * Handles read/write requests from client and manipulates state machine
+  * Node (Router) <-> Node [HTTP]
+    * 52000 (in container network)
+    * 52000 + node ID (in localhost)
+    * Handles data transfer for load balancing
+  * Node (StatsServer) <-> Balancer [gRPC]
+    * 53000 (in container network)
+    * 53000 + node ID (in localhost)
+    * Transfers stats
+  * Dragonboat Internal (Raft) [gRPC]
+    * 54000 (in container network)
+    * Handles Dragonboat internal communication
+  * Debug
+    * 55000 (in container network)
+    * 55000 + node ID (in localhost)
+    * Debug only.
 
 ## Access AdaptoDB
 ### Use client

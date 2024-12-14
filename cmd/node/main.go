@@ -38,14 +38,17 @@ func main() {
 	dlogger.GetLogger("transport").SetLevel(dlogger.WARNING)
 
 	nodeID := flag.Uint64("id", 0, "NodeID to start")
-	address := flag.String("address", "", "Node address (e.g. localhost:63001)")
+	address := flag.String("address", "", "Node address (e.g. localhost)")
+	name := flag.String("name", "", "Node host name in container (e.g. node-3)")
 	groupID := flag.Uint64("group-id", 0, "Raft group ID")
 	dataDir := flag.String("data-dir", "", "Data directory path")
 	walDir := flag.String("wal-dir", "", "WAL directory path")
 	members := flag.String("members", "", "Comma-separated list of member addresses (format: id1=addr1,id2=addr2)")
 	keyrange := flag.String("keyrange", "", "Key range managed by this node (format: start-end)")
-	ctrlAddress := flag.String("ctrl-address", "", "Controller address (e.g. localhost:50001)")
+	ctrlAddress := flag.String("ctrl-address", "", "Controller address (e.g. 127.0.0.1:50001)")
 	flag.Parse()
+
+	fmt.Println(*nodeID, *address, *groupID, *dataDir, *walDir, *members, *keyrange, *ctrlAddress)
 
 	// Validate required flags
 	if *nodeID == 0 || *address == "" || *groupID == 0 {
@@ -79,7 +82,7 @@ func main() {
 		NodeHostDir:    *dataDir,
 		WALDir:         *walDir,
 		RTTMillisecond: 200,
-		RaftAddress:    *address,
+		RaftAddress:    schema.GetDragronboatAddr(*name),
 	}
 
 	nh, err := dragonboat.NewNodeHost(nhc)
@@ -145,15 +148,15 @@ func main() {
 	pb.RegisterNodeStatsServer(statsGrpcServer, statsServer)
 	reflection.Register(statsGrpcServer)
 
-	statsGrpcAddress := fmt.Sprintf("localhost:%d", 53000+*nodeID)
-	lis, err := net.Listen("tcp", statsGrpcAddress)
+	statsGrpcAddress := fmt.Sprintf("0.0.0.0:%d", schema.NodeStatsPort)
+	statesLis, err := net.Listen("tcp", statsGrpcAddress)
 	if err != nil {
 		log.Fatalf("failed to listen on port %s: %v", statsGrpcAddress, err)
 	}
 	logger.Logf("Listening on %s", statsGrpcAddress)
 
 	go func() {
-		if err := statsGrpcServer.Serve(lis); err != nil {
+		if err := statsGrpcServer.Serve(statesLis); err != nil {
 			log.Fatalf("failed to serve: %v", err)
 		}
 	}()
@@ -164,20 +167,20 @@ func main() {
 	pb.RegisterNodeRouterServer(nodeGrpcServer, router)
 	reflection.Register(nodeGrpcServer)
 
-	nodeGrpcAddress := fmt.Sprintf("localhost:%d", 51000+*nodeID)
-	lis, err = net.Listen("tcp", nodeGrpcAddress)
+	nodeGrpcAddress := fmt.Sprintf("0.0.0.0:%d", schema.NodeGrpcPort)
+	nodeLis, err := net.Listen("tcp", nodeGrpcAddress)
 	if err != nil {
 		log.Fatalf("failed to listen on port %s: %v", nodeGrpcAddress, err)
 	}
-	logger.Logf("Listening on %s", nodeGrpcAddress)
 
 	go func() {
-		if err := nodeGrpcServer.Serve(lis); err != nil {
+		logger.Logf("Starting GRPC server listening on %s", nodeGrpcAddress)
+		if err := nodeGrpcServer.Serve(nodeLis); err != nil {
 			log.Fatalf("failed to serve: %v", err)
 		}
 	}()
 
-	nodeHttpAddress := fmt.Sprintf("localhost:%d", 52000+*nodeID)
+	nodeHttpAddress := fmt.Sprintf("0.0.0.0:%d", schema.NodeHttpPort)
 
 	// Create HTTP server for WebSocket connections
 	httpServer := &http.Server{

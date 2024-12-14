@@ -9,7 +9,6 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"strings"
 	"time"
 
 	"google.golang.org/grpc"
@@ -98,7 +97,7 @@ func (a *DefaultAnalyzer) collectMetrics() ([]*NodeMetrics, error) {
 	for _, shard := range raftGroup {
 		// Try to query all members of the shard
 		for _, member := range shard.Members {
-			statsAddr := fmt.Sprintf("%s:%d", strings.Split(member.GrpcAddress, ":")[0], 53000+member.ID)
+			statsAddr := fmt.Sprintf("%s:%d", member.Address, schema.NodeStatsPort+member.ID)
 			logger.Logf("Querying node stats for %s", statsAddr)
 			res, err := queryNodeStats(statsAddr)
 			if err != nil {
