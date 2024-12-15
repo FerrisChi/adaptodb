@@ -55,6 +55,8 @@ func main() {
 
 	handleDarwinSignal()
 
+	logger.Logf("Starting AdaptoDB with algorithm %s and parameter %f\n", algoStr, algoParam)
+
 	metadataManager := initializeMetadataManager(config, logger)
 	launcher := initializeNodes(config, metadataManager, logger)
 	startRaftStabilization(metadataManager, logger)
