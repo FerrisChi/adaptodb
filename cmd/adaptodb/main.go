@@ -70,7 +70,7 @@ func main() {
 		logger.Fatalf("Invalid algorithm specified: %v", err)
 	}
 
-	startBalancer("127.0.0.1:60082", metadataManager, logger, algo, algoParam)
+	balancer := startBalancer("127.0.0.1:60082", metadataManager, logger, algo, algoParam)
 
 	waitForShutdown(logger, launcher, controller, balancer)
 }
@@ -236,7 +236,7 @@ func startGRPCServer(server *grpc.Server, address string, logger struct {
 
 // startBalancer sets up and starts the balancer.
 func startBalancer(
-	controllerAddress string,
+	ctrlLocalAddress string,
 	metadataManager *metadata.Metadata,
 	logger struct {
 		Logf   func(format string, v ...interface{})
