@@ -37,7 +37,7 @@ type NodeMetrics struct {
 }
 
 type Analyzer interface {
-	AnalyzeLoads() ([]schema.Schedule, bool)
+	AnalyzeLoads(algo ImbalanceAlgorithm, algoParam float64) ([]schema.Schedule, bool)
 }
 
 type Balancer struct {
@@ -59,7 +59,11 @@ func NewBalancer(address string, analyzer Analyzer) (*Balancer, error) {
 	}, nil
 }
 
-func (b *Balancer) StartMonitoring() {
+func (b *Balancer) StartMonitoring(algo ImbalanceAlgorithm, algoParam float64) {
+	logger := utils.NamedLogger("Balancer")
+
+	logger.Logf("Starting to Balance with load balancing algorithm: %v and algorithm parmeter: %d", algo, algoParam)
+
 	ticker := time.NewTicker(15 * time.Second)
 	defer ticker.Stop()
 
@@ -68,7 +72,7 @@ func (b *Balancer) StartMonitoring() {
 		case <-b.stopCh:
 			return
 		case <-ticker.C:
-			if newSchedule, reschedule := b.analyzer.AnalyzeLoads(); reschedule {
+			if newSchedule, reschedule := b.analyzer.AnalyzeLoads(algo, algoParam); reschedule {
 				b.sendShardUpdate(newSchedule)
 			}
 		}

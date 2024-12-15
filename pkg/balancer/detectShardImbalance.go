@@ -70,6 +70,7 @@ func DetectPercentileImbalance(loads []*NodeMetrics, percentile float64) []uint6
 
 	// Identify shards exceeding the threshold
 	for _, load := range loads {
+		log.Printf("%d > thresholdIndex: %d, threshold: %d", load.NumEntries, thresholdIndex, threshold)
 		if load.NumEntries >= threshold {
 			imbalancedShards = append(imbalancedShards, load.ShardID)
 		}

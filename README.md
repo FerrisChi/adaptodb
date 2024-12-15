@@ -22,6 +22,13 @@ An Adaptive shard-balancing key-value database
 
 3. Run the executable: `./bin/{release|debug}/adaptodb`
 
+4. The executable by default runs with the load balancing algoritm "Relative" with a threshold of "10". To specify a custom algorithm and custom threshold, you can add the flags:
+`./bin/{release|debug}/adaptodb -algo Relative|Percentile|Statistical -algoParam {num}`
+
+## Running Unit Tests
+
+Run `go test -v ./pkg/balancer`
+
 ## Ports
 * AdaptoDB
   * Controller <-> Balancer (within Controller)

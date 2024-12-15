@@ -36,7 +36,6 @@ func main() {
 	dlogger.GetLogger("config").SetLevel(dlogger.WARNING)
 	dlogger.GetLogger("logdb").SetLevel(dlogger.WARNING)
 	dlogger.GetLogger("transport").SetLevel(dlogger.WARNING)
-
 	nodeID := flag.Uint64("id", 0, "NodeID to start")
 	address := flag.String("address", "", "Node address (e.g. localhost:63001)")
 	groupID := flag.Uint64("group-id", 0, "Raft group ID")
