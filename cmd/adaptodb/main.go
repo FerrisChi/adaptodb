@@ -53,7 +53,7 @@ func main() {
 	controller := initializeController(metadataManager, "127.0.0.1:60082", logger)
 	startHTTPServer(metadataManager, logger)
 	startRouterGRPCServer(metadataManager, logger)
-	balancer := startBalancer(controllerAddress, metadataManager, logger)
+	balancer := startBalancer("127.0.0.1:60082", metadataManager, logger)
 
 	waitForShutdown(logger, launcher, controller, balancer)
 }
@@ -218,13 +218,13 @@ func startGRPCServer(server *grpc.Server, address string, logger struct {
 }
 
 // startBalancer sets up and starts the balancer.
-func startBalancer(controllerAddress string, metadataManager *metadata.Metadata, logger struct {
+func startBalancer(ctrlLocalAddress string, metadataManager *metadata.Metadata, logger struct {
 	Logf   func(format string, v ...interface{})
 	Fatalf func(format string, v ...interface{})
 },
 ) *balancer.Balancer {
 	analyzer := balancer.NewDefaultAnalyzer("default", metadataManager)
-	balancer, err := balancer.NewBalancer(controllerAddress, analyzer)
+	balancer, err := balancer.NewBalancer(ctrlLocalAddress, analyzer)
 	if err != nil {
 		logger.Fatalf("Failed to initialize Balance Watcher: %v", err)
 	}
