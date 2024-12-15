@@ -27,7 +27,7 @@ func NewDefaultAnalyzer(strategy string, metadata *metadata.Metadata) Analyzer {
 	}
 }
 
-func (a *DefaultAnalyzer) AnalyzeLoads() ([]schema.Schedule, bool) {
+func (a *DefaultAnalyzer) AnalyzeLoads(algo ImbalanceAlgorithm, algoParam float64) ([]schema.Schedule, bool) {
 	logger := utils.NamedLogger("DefaultAnalyzer")
 	// 1. collect metrics
 	loads, err := a.collectMetrics()
@@ -46,7 +46,8 @@ func (a *DefaultAnalyzer) AnalyzeLoads() ([]schema.Schedule, bool) {
 	// }
 
 	// 2. detect imbalances
-	imbalancedShards := DetectRelativeImbalance(loads, 10)
+	// imbalancedShards := DetectRelativeImbalance(loads, 10)
+	imbalancedShards := ChooseImbalanceDetections(loads, algo, algoParam)
 	logger.Logf("ImbalancedShards: %v", imbalancedShards)
 	if len(imbalancedShards) == 0 {
 		return []schema.Schedule{}, false
@@ -72,7 +73,7 @@ func queryNodeStats(nodeAddress string) (*NodeMetrics, error) {
 	defer conn.Close()
 
 	client := pb.NewNodeStatsClient(conn)
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	resp, err := client.GetStats(ctx, &pb.GetStatsRequest{})
@@ -111,7 +112,7 @@ func (a *DefaultAnalyzer) collectMetrics() ([]*NodeMetrics, error) {
 				})
 			} else {
 				logger.Logf("Node %d in Shard %d has %d entries:", member.ID, shard.ShardID, res.NumEntries)
-				logger.Logf("Successful Requests: %d, Failed Requests, %d, Last Reset Time: %d", res.NumSuccessfulRequets, res.NumFailedRequests, res.LastResetTime)
+				// logger.Logf("Successful Requests: %d, Failed Requests, %d, Last Reset Time: %d", res.NumSuccessfulRequets, res.NumFailedRequests, res.LastResetTime)
 				res.ShardID = shard.ShardID
 				res.NodeID = member.ID
 				ret = append(ret, res)

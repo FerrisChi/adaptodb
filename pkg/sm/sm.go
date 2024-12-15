@@ -22,8 +22,8 @@ type serializedKV struct {
 }
 
 type serializedSnapshot struct {
-	KVPairs []serializedKV
-	Krs     []schema.KeyRange
+	KVPairs    []serializedKV
+	Krs        []schema.KeyRange
 	NumEntries int64
 }
 
@@ -205,7 +205,7 @@ func (s *KVStore) Update(data []byte) (statemachine.Result, error) {
 		return statemachine.Result{Value: uint64(succ), Data: []byte(fmt.Sprintf("%d data written successfully.", succ))}, nil
 	case "apply_schedule":
 		// Format: apply_schedule:flag,krs
-		params := bytes.Split(params, []byte(","))
+		params := bytes.SplitN(params, []byte(","), 2)
 		flag := string(params[0])
 		krs := schema.ParseKeyRanges(params[1])
 		cnt := s.updateSchedule(flag, krs)
@@ -231,8 +231,8 @@ func (s *KVStore) SaveSnapshot(writer io.Writer, _ statemachine.ISnapshotFileCol
 	})
 
 	snapshot := serializedSnapshot{
-		KVPairs: kvPairs,
-		Krs:     s.krs,
+		KVPairs:    kvPairs,
+		Krs:        s.krs,
 		NumEntries: s.NumEntries,
 	}
 
