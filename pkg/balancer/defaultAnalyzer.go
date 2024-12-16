@@ -48,7 +48,7 @@ func (a *DefaultAnalyzer) AnalyzeLoads(algo ImbalanceAlgorithm, algoParam float6
 	// 2. detect imbalances
 	// imbalancedShards := DetectRelativeImbalance(loads, 10)
 	imbalancedShards := ChooseImbalanceDetections(loads, algo, algoParam)
-	logger.Logf("ImbalancedShards: %v", imbalancedShards)
+	logger.Logf("Algorithm: %s, ImbalancedShards: %v", algo, imbalancedShards)
 	if len(imbalancedShards) == 0 {
 		return []schema.Schedule{}, false
 	}

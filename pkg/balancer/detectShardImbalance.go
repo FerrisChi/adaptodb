@@ -3,7 +3,6 @@ package balancer
 import (
 	"log"
 	"math"
-	"sort"
 )
 
 // This method detects shards whose load is significantly higher relative (precisely higher by "threshold" factor)
@@ -40,39 +39,37 @@ func DetectRelativeImbalance(loads []*NodeMetrics, threshold float64) []uint64 {
 }
 
 // This method uses percentiles to detect shards with loads in the top X percentile.
-func DetectPercentileImbalance(loads []*NodeMetrics, percentile float64) []uint64 {
+func DetectPercentileImbalance(loads []*NodeMetrics, percentage float64) []uint64 {
 	var imbalancedShards []uint64
-	var entryCounts []int64
+	shardEntryCounts := make(map[uint64]int64)
 
 	if checkForSameNumberOfEntries(loads) == true {
 		// Return empty list if same number of entries across all entries
 		return imbalancedShards
 	}
 
-	// Collect entry counts
+	// Collect the number of entries per shard
 	for _, load := range loads {
-		if load.NumEntries >= 0 {
-			entryCounts = append(entryCounts, load.NumEntries)
+		// Only consider one node per shard to calculate the total number of entries
+		if _, exists := shardEntryCounts[load.ShardID]; !exists {
+			shardEntryCounts[load.ShardID] = load.NumEntries
 		}
 	}
 
-	// Sort entry counts
-	sort.Slice(entryCounts, func(i, j int) bool {
-		return entryCounts[i] < entryCounts[j]
-	})
-
-	// Calculate the threshold for the given percentile
-	thresholdIndex := int(float64(len(entryCounts)) * percentile / 100)
-	if thresholdIndex >= len(entryCounts) {
-		thresholdIndex = len(entryCounts) - 1
+	// Calculate the total number of entries across all shards
+	var totalEntries int64
+	for _, count := range shardEntryCounts {
+		totalEntries += count
 	}
-	threshold := entryCounts[thresholdIndex]
+
+	// Calculate the threshold as a percentage of the total entries
+	threshold := int64(float64(totalEntries) * (percentage / 100.0))
 
 	// Identify shards exceeding the threshold
-	for _, load := range loads {
-		log.Printf("%d > thresholdIndex: %d, threshold: %d", load.NumEntries, thresholdIndex, threshold)
-		if load.NumEntries >= threshold {
-			imbalancedShards = append(imbalancedShards, load.ShardID)
+	for shardID, count := range shardEntryCounts {
+		log.Printf("Shard %d: %d entries > threshold: %d (percentage: %.2f%%)", shardID, count, threshold, percentage)
+		if count >= threshold {
+			imbalancedShards = append(imbalancedShards, shardID)
 		}
 	}
 
@@ -99,10 +96,13 @@ func DetectStatisticalImbalance(loads []*NodeMetrics, factor float64) []uint64 {
 	// Calculate mean and standard deviation
 	mean, stdDev := calculateMeanAndStdDev(entryCounts)
 
+	log.Printf("mean: %f, stdDev: %f", mean, stdDev)
+
 	// Identify shards exceeding the threshold
 	for _, load := range loads {
 		if load.NumEntries >= 0 {
 			diff := float64(load.NumEntries) - mean
+			log.Printf("Load: %d, Diff: %f > factor (%f) * stdDev (%f) = %f", load.NumEntries, diff, factor, stdDev, factor*stdDev)
 			if diff > factor*stdDev {
 				imbalancedShards = append(imbalancedShards, load.ShardID)
 			}
