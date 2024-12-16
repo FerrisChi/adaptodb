@@ -5,6 +5,7 @@ import (
 	"adaptodb/pkg/schema"
 	"adaptodb/pkg/utils"
 	"context"
+	"fmt"
 	"time"
 
 	"google.golang.org/grpc"
@@ -41,21 +42,16 @@ type Analyzer interface {
 }
 
 type Balancer struct {
-	client   pb.ControllerClient
-	stopCh   chan struct{}
-	analyzer Analyzer
+	ctrlLocalAddress string
+	stopCh           chan struct{}
+	analyzer         Analyzer
 }
 
 func NewBalancer(address string, analyzer Analyzer) (*Balancer, error) {
-	conn, err := grpc.NewClient(address, grpc.WithTransportCredentials(insecure.NewCredentials()))
-	if err != nil {
-		return nil, err
-	}
-	client := pb.NewControllerClient(conn)
 	return &Balancer{
-		client:   client,
-		stopCh:   make(chan struct{}),
-		analyzer: analyzer,
+		ctrlLocalAddress: address,
+		stopCh:           make(chan struct{}),
+		analyzer:         analyzer,
 	}, nil
 }
 
@@ -79,7 +75,7 @@ func (b *Balancer) StartMonitoring(algo ImbalanceAlgorithm, algoParam float64) {
 	}
 }
 
-func (c *Balancer) sendShardUpdate(newSchedule []schema.Schedule) {
+func (c *Balancer) sendShardUpdate(newSchedule []schema.Schedule) error {
 	logger := utils.NamedLogger("Balancer")
 	protoSchedule := make([]*pb.Schedule, 0, len(newSchedule))
 	for _, shard := range newSchedule {
@@ -97,15 +93,19 @@ func (c *Balancer) sendShardUpdate(newSchedule []schema.Schedule) {
 
 	req := &pb.UpdateScheduleRequest{Schedule: protoSchedule}
 
-	go func() {
-		resp, err := c.client.UpdateSchedule(context.Background(), req)
-		logger.Logf("Sending update schedule request: %v\n", req)
-		if err != nil {
-			logger.Logf("Error sending shard update: %v", err)
-			return
-		}
-		logger.Logf("Shard update response: %s", resp.Message)
-	}()
+	conn, err := grpc.NewClient(c.ctrlLocalAddress, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		return err
+	}
+	client := pb.NewControllerClient(conn)
+
+	resp, err := client.UpdateSchedule(context.Background(), req)
+	logger.Logf("Sending update schedule request: %v\n", req)
+	if err != nil {
+		return fmt.Errorf("error sending shard update: %v", err)
+	}
+	logger.Logf("Shard update response: %s", resp.Message)
+	return nil
 }
 
 func (b *Balancer) Stop() {

@@ -119,9 +119,23 @@ func computeMidpointKey(charStart, charEnd rune, startKey, endKey string) (strin
 
 // Helper: Find the lexographical midpoint b/w 2 strings
 func findLexographicalMidpoint(start, end string) string {
-	if start == end {
-		start = start + start
-		end = end + "{"
+	// Adjust the exclusive end to represent its inclusive equivalent
+	if len(end) > 0 && end[len(end)-1] > 'a' {
+		end = end[:len(end)-1] + string(end[len(end)-1]-1) + "z"
+	} else {
+		end = end + "z"
+	}
+
+	// Pad both strings to the same length
+	maxLength := len(start)
+	if len(end) > maxLength {
+		maxLength = len(end)
+	}
+	for len(start) < maxLength {
+		start += "a"
+	}
+	for len(end) < maxLength {
+		end += "z"
 	}
 
 	// Find the common prefix
@@ -135,33 +149,17 @@ func findLexographicalMidpoint(start, end string) string {
 	// If there are differing characters
 	if i < len(start) && i < len(end) {
 		// Find a midpoint character strictly between start[i] and end[i]
-		midChar := string((start[i] + end[i]) / 2)
-		// log.Printf("commonPrefix: %s", (commonPrefix + midChar))
-		return commonPrefix + midChar
+		midChar := byte((start[i] + end[i]) / 2)
+		// Ensure the midpoint is strictly greater than start[i] and less than end[i]
+		if midChar == start[i] {
+			midChar++
+		} else if midChar == end[i] {
+			midChar--
+		}
+		return commonPrefix + string(midChar)
 	}
 
 	// Handle edge case where one string is a prefix of the other
-	if i < len(start) {
-		// end is prefix of start or they diverge right after the prefix
-		// We'll choose a midpoint between start[i] and a character after start[i]
-		// For simplicity, pick a midpoint between start[i] and 'z'.
-		midChar := byte((start[i] + 'z') / 2)
-		return commonPrefix + string(midChar)
-	}
-
-	if i < len(end) {
-		// start is prefix of end
-		// find a midpoint character between the last prefix character and end[i]
-		var startChar byte = 'a'
-		if len(commonPrefix) > 0 {
-			startChar = commonPrefix[len(commonPrefix)-1]
-		}
-		midChar := byte((startChar + end[i]) / 2)
-		return commonPrefix + string(midChar)
-	}
-
-	// If no characters remain, append "n" to the common prefix
-	// log.Printf("commonPrefix: %s", (commonPrefix + "n"))
 	return commonPrefix + "n"
 }
 

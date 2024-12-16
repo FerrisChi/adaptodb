@@ -9,7 +9,6 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"strings"
 	"time"
 
 	"google.golang.org/grpc"
@@ -49,7 +48,7 @@ func (a *DefaultAnalyzer) AnalyzeLoads(algo ImbalanceAlgorithm, algoParam float6
 	// 2. detect imbalances
 	// imbalancedShards := DetectRelativeImbalance(loads, 10)
 	imbalancedShards := ChooseImbalanceDetections(loads, algo, algoParam)
-	logger.Logf("ImbalancedShards: %v", imbalancedShards)
+	logger.Logf("Algorithm: %s, ImbalancedShards: %v", algo, imbalancedShards)
 	if len(imbalancedShards) == 0 {
 		return []schema.Schedule{}, false
 	}
@@ -99,8 +98,8 @@ func (a *DefaultAnalyzer) collectMetrics() ([]*NodeMetrics, error) {
 	for _, shard := range raftGroup {
 		// Try to query all members of the shard
 		for _, member := range shard.Members {
-			statsAddr := fmt.Sprintf("%s:%d", strings.Split(member.GrpcAddress, ":")[0], 53000+member.ID)
-			// logger.Logf("Querying node stats for %s", statsAddr)
+			statsAddr := fmt.Sprintf("%s:%d", member.Address, schema.NodeStatsPort+member.ID)
+			logger.Logf("Querying node stats for %s", statsAddr)
 			res, err := queryNodeStats(statsAddr)
 			if err != nil {
 				logger.Logf("Failed to query node stats: %v", err)

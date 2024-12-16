@@ -2,17 +2,24 @@ package main
 
 import (
 	"adaptodb/pkg/schema"
+	"context"
 	"fmt"
+	"log"
 	"os"
 	"os/exec"
-	"strconv"
 	"strings"
 
+	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/api/types/filters"
+	"github.com/docker/docker/api/types/network"
+	"github.com/docker/docker/client"
+	"github.com/docker/docker/errdefs"
+	"github.com/docker/go-connections/nat"
 	"golang.org/x/crypto/ssh"
 )
 
-func connectSSH(conf *SSHConfig) (*ssh.Client, error) {
-	key, err := os.ReadFile(conf.KeyPath)
+func connectSSH(spec *NodeSpec) (*ssh.Client, error) {
+	key, err := os.ReadFile(spec.info.SSHKeyPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read SSH key: %v", err)
 	}
@@ -23,20 +30,22 @@ func connectSSH(conf *SSHConfig) (*ssh.Client, error) {
 	}
 
 	config := &ssh.ClientConfig{
-		User: conf.User,
+		User: spec.info.User,
 		Auth: []ssh.AuthMethod{
 			ssh.PublicKeys(signer),
 		},
 		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
 	}
 
-	return ssh.Dial("tcp", conf.Host, config)
+	return ssh.Dial("tcp", spec.info.Address, config)
 }
 
 type Launcher struct {
 	localProcesses map[uint64]*exec.Cmd
 	sshSessions    map[uint64]*ssh.Client
 	ctrlAddress    string
+	networkName    string
+	networkIsSetup bool
 }
 
 func NewLauncher(ctrlAddress string) *Launcher {
@@ -44,6 +53,7 @@ func NewLauncher(ctrlAddress string) *Launcher {
 		localProcesses: make(map[uint64]*exec.Cmd),
 		sshSessions:    make(map[uint64]*ssh.Client),
 		ctrlAddress:    ctrlAddress,
+		networkName:    "adaptodb-net",
 	}
 }
 
@@ -53,48 +63,211 @@ func IsLocalAddress(addr string) bool {
 		addr == "::1"
 }
 
-func (l *Launcher) Launch(spec NodeSpec, members map[uint64]string, keyRanges []schema.KeyRange) error {
-	if IsLocalAddress(spec.GrpcAddress) {
+func (l *Launcher) Launch(spec NodeSpec, members []schema.NodeInfo, keyRanges []schema.KeyRange) error {
+	if IsLocalAddress(spec.info.Address) {
 		return l.launchLocal(spec, members, keyRanges)
 	}
 	return l.launchRemote(spec, members, keyRanges)
 }
 
-func (l *Launcher) launchLocal(spec NodeSpec, members map[uint64]string, keyRanges []schema.KeyRange) error {
-	port, _ := strconv.Atoi(spec.RaftAddress[strings.LastIndex(spec.RaftAddress, ":")+1:])
-	_debugPort := port + 100
-	fmt.Println("debug port: ", _debugPort)
-
-	cmd := exec.Command("./bin/release/node", // use this in production
-		// cmd := exec.Command("dlv", "exec", "./bin/debug/node", "--headless", fmt.Sprintf("--listen=:%d", debugPort), "--api-version=2", "--", // use this in development
-		"--id", fmt.Sprintf("%d", spec.ID),
-		"--group-id", fmt.Sprintf("%d", spec.GroupID),
-		"--address", spec.RaftAddress,
-		"--data-dir", spec.DataDir,
-		"--wal-dir", spec.WalDir,
-		"--members", formatMembers(members),
-		"--keyrange", schema.KeyRangeToString(keyRanges),
-		"--ctrl-address", l.ctrlAddress,
-	)
-
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-
-	if err := cmd.Start(); err != nil {
-		return fmt.Errorf("failed to start local node process: %v", err)
+func (l *Launcher) setupNetwork() error {
+	// Create docker network
+	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
+	if err != nil {
+		return fmt.Errorf("failed to create Docker client: %v", err)
 	}
 
-	l.localProcesses[spec.ID] = cmd
+	_, err = cli.NetworkCreate(context.Background(), l.networkName, network.CreateOptions{
+		Driver: "bridge",
+	})
+	if err != nil {
+		if errdefs.IsConflict(err) {
+			// Ignore the error if the network already exists
+			return nil
+		}
+		return fmt.Errorf("failed to create Docker network: %v", err)
+	}
+
 	return nil
 }
 
-func (l *Launcher) launchRemote(spec NodeSpec, members map[uint64]string, keyRanges []schema.KeyRange) error {
-	client, err := connectSSH(spec.SSH)
+func (l *Launcher) launchLocal(spec NodeSpec, members []schema.NodeInfo, keyRanges []schema.KeyRange) error {
+	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
+	if err != nil {
+		return fmt.Errorf("failed to create Docker client: %v", err)
+	}
+	defer cli.Close()
+	
+	if !l.networkIsSetup {
+		// Check if the network already exists
+		networks, err := cli.NetworkList(context.Background(), network.ListOptions{
+			Filters: filters.NewArgs(
+                filters.Arg("name", "adaptodb-net"),
+            ),
+		})
+		if err != nil {
+			return fmt.Errorf("failed to list Docker networks: %v", err)
+		}
+
+		if len(networks) == 0 {
+            // Network does not exist, create it
+            if err := l.setupNetwork(); err != nil {
+                return fmt.Errorf("failed to setup docker network: %v", err)
+            }
+        }
+		l.networkIsSetup = true
+	}
+
+	
+
+	// Check if the container already exists
+	containers, err := cli.ContainerList(context.Background(), container.ListOptions{
+		All: true,
+		Filters: filters.NewArgs(
+			filters.Arg("name", spec.info.Name),
+		),
+	})
+	if err != nil {
+		return fmt.Errorf("failed to list Docker containers: %v", err)
+	}
+
+	if len(containers) > 0 {
+		// Container exists, start it if it's not running
+		containerID := containers[0].ID
+		if containers[0].State != "running" {
+			if err := cli.ContainerStart(context.Background(), containerID, container.StartOptions{}); err != nil {
+				return fmt.Errorf("failed to start Docker container: %v", err)
+			}
+		}
+		fmt.Printf("Container %s is already running\n", spec.info.Name)
+		return nil
+	}
+
+	// Define the command and arguments to pass to the container
+	cmd := []string{
+		"./bin/debug/node", // use this in development
+		"--id", fmt.Sprintf("%d", spec.info.ID),
+		"--group-id", fmt.Sprintf("%d", spec.GroupID),
+		"--address", spec.info.Address,
+		"--name", spec.info.Name,
+		"--data-dir", spec.DataDir,
+		"--wal-dir", spec.WalDir,
+		"--members", getDragonBoatMembers(members),
+		"--keyrange", schema.KeyRangeToString(keyRanges),
+		"--ctrl-address", l.ctrlAddress,
+	}
+
+	// Define log configuration to redirect stdout and stderr to a file
+	logConfig := container.LogConfig{
+		Type: "json-file",
+		Config: map[string]string{
+			"max-size": "10m",
+			"max-file": "3",
+		},
+	}
+
+	// Define port bindings
+	portBindings := nat.PortMap{
+		nat.Port(fmt.Sprintf("%d/tcp", schema.NodeDebugPort)): []nat.PortBinding{{HostPort: fmt.Sprintf("%d", schema.NodeDebugPort+spec.info.ID)}},
+		nat.Port(fmt.Sprintf("%d/tcp", schema.NodeGrpcPort)):  []nat.PortBinding{{HostPort: fmt.Sprintf("%d", schema.NodeGrpcPort+spec.info.ID)}},
+		nat.Port(fmt.Sprintf("%d/tcp", schema.NodeHttpPort)):  []nat.PortBinding{{HostPort: fmt.Sprintf("%d", schema.NodeHttpPort+spec.info.ID)}},
+		nat.Port(fmt.Sprintf("%d/tcp", schema.NodeStatsPort)): []nat.PortBinding{{HostPort: fmt.Sprintf("%d", schema.NodeStatsPort+spec.info.ID)}},
+	}
+
+	log.Printf("Port bindings: %v", portBindings)
+
+	// Create the container
+	resp, err := cli.ContainerCreate(context.Background(), &container.Config{
+		Image:    "adaptodb-node", // Replace with your Docker image
+		Cmd:      cmd,
+		Hostname: spec.info.Name,
+	}, &container.HostConfig{
+		NetworkMode:  container.NetworkMode(l.networkName),
+		PortBindings: portBindings,
+		LogConfig:    logConfig,
+	}, &network.NetworkingConfig{
+		EndpointsConfig: map[string]*network.EndpointSettings{
+			l.networkName: {},
+		},
+	}, nil, spec.info.Name)
+
+	if err != nil {
+		return fmt.Errorf("failed to create Docker container: %v", err)
+	}
+
+	// Start the container
+	if err := cli.ContainerStart(context.Background(), resp.ID, container.StartOptions{}); err != nil {
+		return fmt.Errorf("failed to start Docker container: %v", err)
+	}
+
+	return nil
+}
+
+// dockerCleanup stops and removes all running containers and networks
+func (l *Launcher) dockerCleanup() error {
+	ctx := context.Background()
+	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
+	if err != nil {
+		return fmt.Errorf("failed to create Docker client: %v", err)
+	}
+	defer cli.Close()
+
+	containers, err := cli.ContainerList(ctx, container.ListOptions{})
+	if err != nil {
+		return fmt.Errorf("failed to list Docker containers: %v", err)
+	}
+
+	// Stop containers
+	for _, cntner := range containers {
+		fmt.Printf("Stopping container %s (%s)...\n", cntner.ID[:10], cntner.Names[0])
+		if err := cli.ContainerStop(ctx, cntner.ID, container.StopOptions{}); err != nil {
+			fmt.Printf("Warning: failed to stop container: %v\n", err)
+			continue
+		}
+
+		// Remove container and its volumes
+		// fmt.Printf("Removing container %s and its volumes...\n", cntner.ID[:10])
+		// if err := cli.ContainerRemove(ctx, cntner.ID, container.RemoveOptions{
+		// 	RemoveVolumes: true,
+		// 	Force:         true,
+		// }); err != nil {
+		// 	fmt.Printf("Warning: failed to remove container: %v\n", err)
+		// 	continue
+		// }
+	}
+	fmt.Println("Containers cleanup succeed")
+
+	// Remove docker network
+	// networks, err := cli.NetworkList(ctx, network.ListOptions{
+	// 	Filters: filters.NewArgs(
+	// 		filters.Arg("name", l.networkName),
+	// 	),
+	// })
+	// if err != nil {
+	// 	return fmt.Errorf("failed to list networks: %v", err)
+	// }
+
+	// for _, nw := range networks {
+	// 	fmt.Printf("Removing network %s...\n", nw.Name)
+	// 	if err := cli.NetworkRemove(ctx, nw.ID); err != nil {
+	// 		if !errdefs.IsNotFound(err) {
+	// 			fmt.Printf("Warning: failed to remove network: %v\n", err)
+	// 		}
+	// 		continue
+	// 	}
+	// }
+	// fmt.Println("Network cleanup succeed")
+
+	return nil
+}
+
+func (l *Launcher) launchRemote(spec NodeSpec, members []schema.NodeInfo, keyRanges []schema.KeyRange) error {
+	client, err := connectSSH(&spec)
 	if err != nil {
 		return fmt.Errorf("failed to establish SSH connection: %v", err)
 	}
 
-	l.sshSessions[spec.ID] = client
+	l.sshSessions[spec.info.ID] = client
 
 	session, err := client.NewSession()
 	if err != nil {
@@ -103,7 +276,7 @@ func (l *Launcher) launchRemote(spec NodeSpec, members map[uint64]string, keyRan
 	defer session.Close()
 
 	cmd := fmt.Sprintf("./node -id %d -addr %s -group %d -data-dir %s -wal-dir %s -members '%s'",
-		spec.ID, spec.RaftAddress, spec.GroupID, spec.DataDir, spec.WalDir, formatMembers(members))
+		spec.info.ID, spec.info.Address, spec.GroupID, spec.DataDir, spec.WalDir, getDragonBoatMembers(members))
 
 	if err := session.Start(cmd); err != nil {
 		return fmt.Errorf("failed to start remote command: %v", err)
@@ -114,12 +287,14 @@ func (l *Launcher) launchRemote(spec NodeSpec, members map[uint64]string, keyRan
 
 func (l *Launcher) Stop() error {
 	// Stop local processes
-	for _, proc := range l.localProcesses {
-		if err := proc.Process.Kill(); err != nil {
-			return fmt.Errorf("failed to kill local process: %v", err)
-		}
-		proc.Wait()
-	}
+	l.dockerCleanup()
+
+	// for _, proc := range l.localProcesses {
+	// 	if err := proc.Process.Kill(); err != nil {
+	// 		return fmt.Errorf("failed to kill local process: %v", err)
+	// 	}
+	// 	proc.Wait()
+	// }
 
 	// Close SSH sessions
 	for _, client := range l.sshSessions {
@@ -129,13 +304,10 @@ func (l *Launcher) Stop() error {
 	return nil
 }
 
-func formatMembers(members map[uint64]string) string {
-	result := ""
-	for id, addr := range members {
-		if result != "" {
-			result += ","
-		}
-		result += fmt.Sprintf("%d=%s", id, addr)
+func getDragonBoatMembers(mapping []schema.NodeInfo) string {
+	var members []string
+	for _, node := range mapping {
+		members = append(members, fmt.Sprintf("%d=%s", node.ID, schema.GetDragronboatAddr(node.Name)))
 	}
-	return result
+	return strings.Join(members, ",")
 }

@@ -18,8 +18,7 @@ for PORT in "${PORTS[@]}"; do
 
     if [ -n "$PID" ]; then
         # echo "Found process with PID $PID on port $PORT. Killing it..."
-        kill -SIGINT $PID
-        echo "Process $PID on port $PORT killed."
+        echo "Process $PID is running on $PORT."
     else
         echo "No process found on port $PORT."
     fi

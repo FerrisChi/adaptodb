@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log"
 	"math/rand"
-	"strings"
 	"time"
 
 	pb "adaptodb/pkg/proto/proto"
@@ -41,7 +40,7 @@ func getRandomNodeHTTPServer(shard schema.RaftGroup) (schema.NodeInfo, string) {
 	// idx := uint64(rand.Intn(len(shard.Members)))
 	idx := uint64(0)
 	node := shard.Members[idx]
-	httpAddress := fmt.Sprintf("%s:%d", strings.Split(node.GrpcAddress, ":")[0], 52000+node.ID)
+	httpAddress := fmt.Sprintf("%s:%d", node.Name, schema.NodeHttpPort)
 	return node, httpAddress
 }
 
@@ -50,8 +49,9 @@ func (op *Operator) migrate(ctx context.Context) error {
 	fromNode, fromHttpAddress := getRandomNodeHTTPServer(op.fromShard)
 	toNode, toHttpAddress := getRandomNodeHTTPServer(op.toShard)
 	op.fromNode, op.toNode = fromNode, toNode
+	target := fmt.Sprintf("%s:%d", fromNode.Address, schema.NodeGrpcPort+fromNode.ID)
 	fromConn, err := grpc.NewClient(
-		op.fromNode.GrpcAddress,
+		target,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithDefaultCallOptions(
 			grpc.MaxCallRecvMsgSize(64*1024*1024),
@@ -64,8 +64,9 @@ func (op *Operator) migrate(ctx context.Context) error {
 	defer fromConn.Close()
 	fromClient := pb.NewNodeRouterClient(fromConn)
 
+	target = fmt.Sprintf("%s:%d", toNode.Address, schema.NodeGrpcPort+toNode.ID)
 	toConn, err := grpc.NewClient(
-		op.toNode.GrpcAddress,
+		target,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	)
 	if err != nil {
@@ -107,8 +108,9 @@ func (op *Operator) migrate(ctx context.Context) error {
 }
 
 func (op *Operator) cancelMigration() error {
+	target := fmt.Sprintf("%s:%d", op.fromNode.Address, schema.NodeGrpcPort+op.fromNode.ID)
 	fromConn, err := grpc.NewClient(
-		op.fromNode.GrpcAddress,
+		target,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	)
 	if err != nil {
@@ -117,8 +119,9 @@ func (op *Operator) cancelMigration() error {
 	defer fromConn.Close()
 	fromClient := pb.NewNodeRouterClient(fromConn)
 
+	target = fmt.Sprintf("%s:%d", op.toNode.Address, schema.NodeGrpcPort+op.toNode.ID)
 	toConn, err := grpc.NewClient(
-		op.toNode.GrpcAddress,
+		target,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	)
 	if err != nil {
@@ -152,8 +155,9 @@ func (op *Operator) cancelMigration() error {
 }
 
 func (op *Operator) finishMigration() error {
+	target := fmt.Sprintf("%s:%d", op.fromNode.Address, schema.NodeGrpcPort+op.fromNode.ID)
 	fromConn, err := grpc.NewClient(
-		op.fromNode.GrpcAddress,
+		target,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	)
 	if err != nil {
@@ -162,8 +166,9 @@ func (op *Operator) finishMigration() error {
 	defer fromConn.Close()
 	fromClient := pb.NewNodeRouterClient(fromConn)
 
+	target = fmt.Sprintf("%s:%d", op.toNode.Address, schema.NodeGrpcPort+op.toNode.ID)
 	toConn, err := grpc.NewClient(
-		op.toNode.GrpcAddress,
+		target,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	)
 	if err != nil {

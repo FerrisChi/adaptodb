@@ -162,6 +162,10 @@ func TestFindLexographicalMidpoint(t *testing.T) {
 		{start: "a", end: "a", expected: "an"},
 		{start: "aa", end: "an", expected: "ag"},
 		{start: "aa", end: "aa", expected: "aan"},
+		{start: "a", end: "aan", expected: "aag"},
+		{start: "z", end: "z{", expected: ""},
+		{start: "ab", end: "ad", expected: "ac"},
+		{start: "a", end: "ab", expected: "aan"},
 		// {start: "abc", end: "abd", expected: "abcn"},
 		// {start: "prefix", end: "prefixz", expected: "prefixn"},
 	}

@@ -1,7 +1,14 @@
 GO_DEBUG_CMD=go build -gcflags=all="-N -l" # add -gcflags=all="-N -l" for debugging
 GO_RELEASE_CMD=go build
 
-all: build
+all: build docker-build
+
+docker-build: docker-clean
+	docker build -t adaptodb-node -f Dockerfile.node .
+
+docker-clean:
+	@if [ -n "$$(docker ps -aq -f name=node-*)" ]; then docker rm -f $$(docker ps -aq -f name=node-*); fi
+	docker network rm adaptodb-net || true
 
 build: debug release
 
@@ -23,10 +30,8 @@ proto:
 		--go-grpc_out=pkg/proto/proto --go-grpc_opt=paths=source_relative \
 		pkg/proto/*.proto;
 
-clean:
-	rm -f adaptodb
-	rm -f client
-	rm -f node
+clean: docker-clean
+	rm -rf ./bin/
 	rm -f pkg/*/proto/*.pb.go
 
-.PHONY: build debug release clean proto
+.PHONY: docker-build docker-clean build debug release clean proto

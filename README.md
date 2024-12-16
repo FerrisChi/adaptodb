@@ -3,24 +3,32 @@ An Adaptive shard-balancing key-value database
 
 ## Build
 
-0. If you are migrating from dragonboat v4 to v3, please delete the `tmp/` data generated from previous runs first: `rm -r tmp/`
-1. Download go mods: `go mod tidy`
-2. Make the project: `make`
+0. Setup `host.docker.internal` for container's access to host if you're using OS other than MacOS.
+1. If you are migrating from dragonboat v4 to v3, please delete the `tmp/` data generated from previous runs first: `rm -r tmp/`
+2. Download go mods: `go mod tidy`
+3. Make the project: `make`
 
-> If you run into an error like:
-> ```
-> protoc-gen-go-grpc: program not found or is not executable
-> Please specify a program using absolute path or make sure the program is available in > your PATH system variable
-> --go-grpc_out: protoc-gen-go-grpc: Plugin failed with status code 1.
-> ```
-> Make sure `protobuf` and the [gRPC](https://grpc.io/docs/languages/go/quickstart/) plugins (`protoc-gen-go` and `protoc-gen-go-grpc`) are installed by running
-> ```shell
-> $ go install google.golang.org/protobuf/cmd/protoc-gen-go
-> $ go install google.golang.org/grpc/cmd/protoc-gen-go-grpc
-> $ export PATH="$PATH:$(go env GOPATH)/bin"
-> ```
+    > If you run into an error like:
+    > ```
+    > protoc-gen-go-grpc: program not found or is not executable
+    > Please specify a program using absolute path or make sure the program is available in > your PATH system variable
+    > --go-grpc_out: protoc-gen-go-grpc: Plugin failed with status code 1.
+    > ```
+    > Make sure `protobuf` and the [gRPC](https://grpc.io/docs/languages/go/quickstart/) plugins (`protoc-gen-go` and `protoc-gen-go-grpc`) are installed by running
+    > ```shell
+    > $ go install google.golang.org/protobuf/cmd/protoc-gen-go
+    > $ go install google.golang.org/grpc/cmd/protoc-gen-go-grpc
+    > $ export PATH="$PATH:$(go env GOPATH)/bin"
+    > ```
 
-3. Run the executable: `./bin/{release|debug}/adaptodb`
+4. Run the executable: `./bin/{release|debug}/adaptodb`
+
+### Other build options
+1. `make clean` delete executables and protos
+2. `make docker-build` build docker image for node
+3. `make docker-clean` delete all docker containers and docker network for node
+4. `make build` build adaptodb
+5. `make proto` generate protobuf `.pb` code
 
 4. The executable by default runs with the load balancing algoritm "Relative" with a threshold of "10". To specify a custom algorithm and custom threshold, you can add the flags:
 `./bin/{release|debug}/adaptodb -algo Relative|Percentile|Statistical -algoParam {num}`
@@ -30,28 +38,38 @@ An Adaptive shard-balancing key-value database
 Run `go test -v ./pkg/balancer`
 
 ## Ports
+
+See ports in `pkg/schema/constant.go`
+
 * AdaptoDB
   * Controller <-> Balancer (within Controller)
-    * gRPC: 60082
-    * Handle new schedule advice from balancer.
+    * gRPC: **60082**
+    * Handles new schedule advice from balancer
   * Controller Router <-> Client
-    * HTTP: 60080
-    * gRPC: 60081
-    * Handle metadata query.
+    * HTTP: **60080**
+    * gRPC: **60081**
+    * Handles metadata queries
 
 * Node
-  * Node (router) <-> Client
-    * gRPC: 51000 + node id
-    * Handle read/write request from client and manipulate statemachine.
-  * Node (router) <-> Node
-    * WebSocket: 52000 + node id
-    * Handle data transfer for load balancing.
-  * Node (statsServer) <-> Balancer
-    * gRPC: 53000 + node id
-    * Transferring stats.
-  * Dragonboat internal (Raft)
-    * IP:port set in `config.yaml`
-    * Hanlde dragonboat internal communication.
+  * Node (Router) <-> Client [gRPC]
+    * **51000** (in container network)
+    * 51000 + node ID (in localhost)
+    * Handles read/write requests from client and manipulates state machine
+  * Node (Router) <-> Node [HTTP]
+    * **52000** (in container network)
+    * 52000 + node ID (in localhost)
+    * Handles data transfer for load balancing
+  * Node (StatsServer) <-> Balancer [gRPC]
+    * **53000** (in container network)
+    * 53000 + node ID (in localhost)
+    * Transfers stats
+  * Dragonboat Internal (Raft) [gRPC]
+    * **54000** (in container network)
+    * Handles Dragonboat internal communication
+  * Debug
+    * **55000** (in container network)
+    * 55000 + node ID (in localhost)
+    * Debug only.
 
 ## Access AdaptoDB
 ### Use client
